@@ -154,7 +154,7 @@ final class StatsController
             return new JsonResponse($data);
         }
 
-        $rows = $this->flattenForCsv($data);
+        $rows = $this->csvRows($data);
 
         return new StreamedResponse(static function () use ($rows): void {
             $handle = fopen('php://output', 'w');
@@ -178,36 +178,42 @@ final class StatsController
      * @return list<list<string>>
      */
     /**
+     * Erzeugt die CSV-Zeilen als Generator, damit Zeilen unmittelbar in
+     * den Response-Stream geschrieben werden und keine vollständige
+     * Ergebnisliste im Speicher entsteht. Die Exportmenge ist über
+     * `limit` (max. 100) und `days` (max. max_report_days) begrenzt.
+     *
      * @param array<string, mixed> $data
      *
-     * @return list<list<string>>
+     * @return \Generator<int, list<string>>
      */
-    private function flattenForCsv(array $data): array
+    private function csvRows(array $data): \Generator
     {
-        $rows = [];
         $inner = $data['data'] ?? [];
 
-        if (\array_is_list($inner)) {
+        if (\is_array($inner) && \array_is_list($inner)) {
             foreach ($inner as $item) {
                 if (\is_array($item)) {
-                    $rows[] = array_map(
+                    yield array_map(
                         static fn ($value): string => \is_scalar($value) ? (string) $value : (string) json_encode($value),
                         $item,
                     );
                 }
             }
 
-            return $rows;
+            return;
+        }
+
+        if (!\is_array($inner)) {
+            return;
         }
 
         foreach ($inner as $key => $value) {
-            $rows[] = [
+            yield [
                 (string) $key,
                 \is_scalar($value) ? (string) $value : (string) json_encode($value),
             ];
         }
-
-        return $rows;
     }
 
     private function assertAccess(): void

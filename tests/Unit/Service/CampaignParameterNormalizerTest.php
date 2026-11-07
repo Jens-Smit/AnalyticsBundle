@@ -48,16 +48,32 @@ final class CampaignParameterNormalizerTest extends TestCase
         self::assertNull($result['utm_campaign']);
     }
 
-    public function testAllowlistDiscardsUnknownValues(): void
+    public function testAllowlistAppliesOnlyToUtmSource(): void
     {
         $normalizer = new CampaignParameterNormalizer(['newsletter', 'ads']);
 
         $result = $normalizer->normalize([
             'utm_source' => 'newsletter',
-            'utm_medium' => 'evil',
+            'utm_medium' => 'organic',
+            'utm_campaign' => 'summer-sale',
         ]);
 
         self::assertSame('newsletter', $result['utm_source']);
-        self::assertNull($result['utm_medium']);
+        // Medium und Kampagne werden unabhängig von der Quellen-Allowlist gespeichert.
+        self::assertSame('organic', $result['utm_medium']);
+        self::assertSame('summer-sale', $result['utm_campaign']);
+    }
+
+    public function testAllowlistDiscardsUnknownSourcesOnly(): void
+    {
+        $normalizer = new CampaignParameterNormalizer(['newsletter']);
+
+        $result = $normalizer->normalize([
+            'utm_source' => 'google',
+            'utm_medium' => 'organic',
+        ]);
+
+        self::assertNull($result['utm_source']);
+        self::assertSame('organic', $result['utm_medium']);
     }
 }

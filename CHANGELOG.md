@@ -6,6 +6,12 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokument
 
 ### Geändert
 
+- (Re-Audit 07.11.2026) Einheitliche Privacy-Policy: Die neue zentrale `PrivacyPolicy` wendet `exclude_bots`, `respect_dnt` und `respect_gpc` identisch für PageViews und Custom Events an; zuvor waren die Regeln bei Events fest aktiviert und ignorierten die Konfiguration. Bei Ablehnung wird weder ein PageView noch ein Event gespeichert.
+- (Re-Audit 07.11.2026) Messenger-Dispatch vollständig integriert: Mit `async_recording: true` und installiertem `symfony/messenger` dispatcht der `PageViewRecorder` die normalisierte `RecordPageViewMessage` statt direkt zu speichern; der Handler persistiert sie. Ohne Messenger bleibt der synchrone Betrieb Standard (Fallback), At-least-once-Duplikatverhalten ist dokumentiert.
+- (Re-Audit 07.11.2026) Campaign-Allowlist gilt ausschließlich für `utm_source`: `utm_medium` und `utm_campaign` werden unabhängig davon normalisiert und gekürzt. Migrationshinweis: Bestehende Allowlist-Konfigurationen, die versehentlich Medium-/Campaign-Werte gefiltert haben, speichern diese nun.
+- (Re-Audit 07.11.2026) CSV-Export schreibt Zeilen als Generator direkt in den Response-Stream; die Exportmenge bleibt über `limit` (max. 100) und `days` (max. `max_report_days`) begrenzt und dokumentiert.
+- (Re-Audit 07.11.2026) JavaScript-SDK wertet den Rückgabewert von `sendBeacon()` aus: Nur bei erfolgreicher Einreihung wird kein weiterer Request erzeugt; bei `false` oder fehlendem `sendBeacon()` läuft der `fetch(keepalive)`-Fallback.
+
 - Tagespseudonym auf HMAC-SHA256 umgestellt: `hash_secret` wird als kryptografischer Schlüssel verwendet, nicht an die Eingabe angehängt. `salt` bleibt als veralteter Alias akzeptiert. Bestehende Hashes bleiben historische Pseudonyme; am Umstellungstag können Besuchstage-Metriken einmalig verzerrt sein.
 - UTC als durchgehende interne Zeitstrategie: Zeitstempel, Tagesgrenzen des Hash-Tag und Report-Zeiträume laufen über eine zentrale `SystemClock` in UTC, unabhängig von der Server-Zeitzone.
 - Konfiguration wird beim Container-Kompilieren validiert: `site_key` auf max. 32 Zeichen und `[a-zA-Z0-9_-]` begrenzt, `hash_secret` muss nicht leer und mindestens 16 Zeichen lang sein.
@@ -18,6 +24,9 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokument
 - `analytics:purge` bereinigt PageViews und Events gemeinsam und erhöht nach `--force` die Report-Cache-Generation.
 
 ### Hinzugefügt
+
+- (Re-Audit 07.11.2026) Release-Candidate-Validierung: Funktionaler End-to-End-Test über den kompilierten Container der Testanwendung (Erfassung über den Recorder, Reports über den StatsService, Privacy-Ablehnung), ergänzend zur Composer-Fremdprojekt-Installation in der Paketierungs-CI.
+- (Re-Audit 07.11.2026) Unit-Tests für `PrivacyPolicy` (alle Options-Kombinationen), Messenger-Dispatch und Synchron-Fallback sowie Allowlist-Semantik je UTM-Feld.
 
 - Traffic-Attribution: `TrafficSourceClassifier` (direct, search, social, internal, referral, campaign), `sourcesForSite()` als SQL-Repository-Methode, `GET /analytics/stats/sources`; Kampagnen-Parameter `utm_source`/`utm_medium`/`utm_campaign` werden normalisiert, gekürzt und optional per `campaign_allowlist` validiert (`utm_term`/`utm_content` werden nicht gespeichert). Neue Spalten `source`, `utm_source`, `utm_medium`, `utm_campaign`.
 - Custom Events: Entity `AnalyticsEvent` (Tabelle `jenssmit_analytics_event`), `AnalyticsEventRecorder`, `EventNameValidator`, `EventValueNormalizer` (Werte nur mit `record_event_values`), Endpunkt `POST /analytics/collect/event` mit denselben Schutzschichten, `GET /analytics/stats/events`, Retention über `analytics:purge`.

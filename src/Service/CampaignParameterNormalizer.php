@@ -7,9 +7,14 @@ namespace Jenssmit\AnalyticsBundle\Service;
  *
  * Gespeichert werden ausschließlich utm_source, utm_medium und
  * utm_campaign. utm_term und utm_content werden bewusst nicht
- * gespeichert. Werte werden gekürzt, von Steuer- und Markup-Zeichen
- * befreit und gegen eine optionale Allowlist geprüft. Ungültige Werte
- * werden verworfen, nicht gespeichert.
+ * gespeichert. Werte werden gekürzt und von Steuer- und
+ * Markup-Zeichen befreit.
+ *
+ * Die Allowlist gilt ausschließlich für utm_source: Sie beschreibt
+ * zulässige Verkehrsquellen. utm_medium und utm_campaign werden
+ * unabhängig davon nur normalisiert und gekürzt, damit zulässige
+ * Medium- und Kampagnenwerte nicht an einer Quellen-Allowlist
+ * scheitern. Ungültige Werte werden verworfen, nicht gespeichert.
  */
 final class CampaignParameterNormalizer
 {
@@ -36,13 +41,13 @@ final class CampaignParameterNormalizer
     public function normalize(?array $campaign): array
     {
         return [
-            'utm_source' => $this->normalizeValue($campaign['utm_source'] ?? null, self::MAX_SOURCE_LENGTH),
+            'utm_source' => $this->normalizeValue($campaign['utm_source'] ?? null, self::MAX_SOURCE_LENGTH, true),
             'utm_medium' => $this->normalizeValue($campaign['utm_medium'] ?? null, self::MAX_MEDIUM_LENGTH),
             'utm_campaign' => $this->normalizeValue($campaign['utm_campaign'] ?? null, self::MAX_CAMPAIGN_LENGTH),
         ];
     }
 
-    private function normalizeValue(mixed $value, int $maxLength): ?string
+    private function normalizeValue(mixed $value, int $maxLength, bool $applyAllowlist = false): ?string
     {
         if (!\is_string($value) || '' === trim($value)) {
             return null;
@@ -58,7 +63,7 @@ final class CampaignParameterNormalizer
 
         $value = mb_substr($value, 0, $maxLength);
 
-        if ([] !== $this->allowlist && !\in_array($value, $this->allowlist, true)) {
+        if ($applyAllowlist && [] !== $this->allowlist && !\in_array($value, $this->allowlist, true)) {
             return null;
         }
 

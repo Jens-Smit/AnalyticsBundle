@@ -8,16 +8,16 @@ use Symfony\Component\HttpFoundation\Request;
 
 /**
  * Erfassung eines Custom Events mit denselben Datenschutzregeln wie
- * der Seitenaufruf: Bots werden ausgeschlossen, DNT und Sec-GPC werden
- * respektiert, Pfade normalisiert, das Besucher-Pseudonym ist
- * tagesbezogen. Event-Namen werden streng validiert, Werte nur bei
+ * der Seitenaufruf: Die zentrale PrivacyPolicy entscheidet über
+ * Bot-Ausschluss, DNT und Sec-GPC, Pfade werden normalisiert, das
+ * Besucher-Pseudonym ist tagesbezogen. Event-Namen werden streng validiert, Werte nur bei
  * aktivierter Option gespeichert.
  */
 class AnalyticsEventRecorder
 {
     public function __construct(
         private readonly AnalyticsEventRepository $repository,
-        private readonly BotDetector $botDetector,
+        private readonly PrivacyPolicy $privacyPolicy,
         private readonly PathNormalizer $pathNormalizer,
         private readonly IpAnonymizer $ipAnonymizer,
         private readonly EventNameValidator $eventNameValidator,
@@ -52,11 +52,7 @@ class AnalyticsEventRecorder
             $category = null;
         }
 
-        if ($this->botDetector->isBot($request->headers->get('User-Agent'))) {
-            return false;
-        }
-
-        if ('1' === $request->headers->get('DNT') || '1' === $request->headers->get('Sec-GPC')) {
+        if (!$this->privacyPolicy->allowsRecording($request)) {
             return false;
         }
 

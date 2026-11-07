@@ -45,7 +45,8 @@ final class ConfigurationTest extends TestCase
         self::assertSame(4096, $config['collect_max_request_size']);
         self::assertSame([], $config['allowed_origins']);
 
-        // Bot- und Privacy-Signale sind standardmäßig aktiv.
+        // Bot- und Privacy-Signale sind standardmäßig aktiv, Recording synchron.
+        self::assertFalse($config['async_recording']);
         self::assertTrue($config['exclude_bots']);
         self::assertTrue($config['respect_dnt']);
         self::assertTrue($config['respect_gpc']);
