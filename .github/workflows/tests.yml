@@ -6,21 +6,86 @@ on:
     pull_request:
 
 jobs:
-    tests:
+    quality:
+        name: Qualität (PHP ${{ matrix.php-version }})
         runs-on: ubuntu-latest
         strategy:
             fail-fast: false
             matrix:
                 php-version: ['8.2', '8.3', '8.4']
         steps:
-            - uses: actions/checkout@v4
+            - name: Repository auschecken
+              uses: actions/checkout@v4
 
-            - uses: shivammathur/setup-php@v2
+            - name: PHP einrichten
+              uses: shivammathur/setup-php@v2
               with:
                   php-version: ${{ matrix.php-version }}
+                  coverage: none
 
-            - name: Composer-Abhängigkeiten installieren
+            - name: Composer-Manifest validieren
+              run: composer validate
+
+            - name: Abhängigkeiten installieren
               run: composer install --prefer-dist --no-progress
 
-            - name: PHPUnit ausführen
-              run: vendor/bin/phpunit
+            - name: Code-Style prüfen (PHP-CS-Fixer)
+              run: vendor/bin/php-cs-fixer fix --dry-run --diff
+
+            - name: Statische Analyse (PHPStan)
+              run: vendor/bin/phpstan analyse --no-progress
+
+            - name: Unit-Tests
+              run: vendor/bin/phpunit --testsuite unit
+
+    integration:
+        name: Integrationstests (MySQL und PostgreSQL)
+        runs-on: ubuntu-latest
+        services:
+            mysql:
+                image: mysql:8.0
+                env:
+                    MYSQL_ROOT_PASSWORD: root
+                    MYSQL_DATABASE: analytics_test
+                ports:
+                    - 3306:3306
+                options: >-
+                    --health-cmd "mysqladmin ping --silent"
+                    --health-interval 5s
+                    --health-timeout 3s
+                    --health-retries 20
+            postgres:
+                image: postgres:16
+                env:
+                    POSTGRES_USER: postgres
+                    POSTGRES_PASSWORD: postgres
+                    POSTGRES_DB: analytics_test
+                ports:
+                    - 5432:5432
+                options: >-
+                    --health-cmd "pg_isready -U postgres"
+                    --health-interval 5s
+                    --health-timeout 3s
+                    --health-retries 20
+        steps:
+            - name: Repository auschecken
+              uses: actions/checkout@v4
+
+            - name: PHP einrichten
+              uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.3'
+                  coverage: none
+
+            - name: Abhängigkeiten installieren
+              run: composer install --prefer-dist --no-progress
+
+            - name: Integrationstests (MySQL 8.0)
+              run: vendor/bin/phpunit --testsuite integration
+              env:
+                  ANALYTICS_DATABASE_URL: mysql://root:root@127.0.0.1:3306/analytics_test?serverVersion=8.0
+
+            - name: Integrationstests (PostgreSQL 16)
+              run: vendor/bin/phpunit --testsuite integration
+              env:
+                  ANALYTICS_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/analytics_test?serverVersion=16
