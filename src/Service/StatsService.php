@@ -4,10 +4,19 @@ namespace Jenssmit\AnalyticsBundle\Service;
 
 use Jenssmit\AnalyticsBundle\Repository\PageViewRepository;
 
+/**
+ * Wertet die Seitenaufrufe genau eines Mandanten aus.
+ *
+ * Der Site-Key wird per Dependency Injection gesetzt. Jede Abfrage
+ * läuft über Repository-Methoden, die den Site-Filter zwingend
+ * voraussetzen; das Service kann keine anderen Mandanten sehen.
+ */
 final class StatsService
 {
-    public function __construct(private readonly PageViewRepository $repository)
-    {
+    public function __construct(
+        private readonly PageViewRepository $repository,
+        private readonly string $siteKey,
+    ) {
     }
 
     /**
@@ -16,65 +25,54 @@ final class StatsService
     public function summary(int $days = 30): array
     {
         $from = $this->startOfPeriod($days);
-        $rows = $this->repository->findSince($from);
-
-        $views = 0;
-        $visitors = [];
-        foreach ($rows as $row) {
-            ++$views;
-            $hash = $row->getIpHash();
-            if (null !== $hash && '' !== $hash) {
-                $visitors[$hash] = true;
-            }
-        }
+        $views = $this->repository->countViewsForSite($this->siteKey, $from);
+        $visitors = $this->repository->countVisitorsForSite($this->siteKey, $from);
 
         return [
+            'site' => $this->siteKey,
             'period' => [
-                'days' => $days,
                 'from' => $from->format('Y-m-d'),
-                'until' => (new \DateTimeImmutable('today'))->format('Y-m-d'),
+                'days' => $days,
             ],
             'views' => $views,
-            'unique_visitors' => \count($visitors),
+            'unique_visitors' => $visitors,
             'views_per_day' => 0 === $views ? 0 : round($views / max($days, 1), 2),
         ];
     }
 
     /**
+     * Zeitreihe mit lückenloser Tagesfolge. Fehlende Tage werden mit
+     * Nullen aufgefüllt; die Gruppierung selbst macht die Datenbank.
+     *
      * @return array<string, mixed>
      */
     public function timeseries(int $days = 30): array
     {
+        $days = max($days, 1);
         $from = $this->startOfPeriod($days);
-        $rows = $this->repository->findSince($from);
+
+        $rows = $this->repository->timeseriesForSite($this->siteKey, $from);
+
+        $byDay = [];
+        foreach ($rows as $row) {
+            $byDay[$row['day']] = $row;
+        }
 
         $series = [];
-        for ($i = max($days, 1) - 1; $i >= 0; --$i) {
-            $date = (new \DateTimeImmutable('today'))->modify(sprintf('-%d days', $i));
-            $series[$date->format('Y-m-d')] = [
-                'date' => $date->format('Y-m-d'),
-                'views' => 0,
-                'visitors' => 0,
+        for ($i = $days - 1; $i >= 0; --$i) {
+            $day = (new \DateTimeImmutable('today'))->modify(\sprintf('-%d days', $i))->format('Y-m-d');
+            $series[] = [
+                'date' => $day,
+                'views' => $byDay[$day]['views'] ?? 0,
+                'visitors' => $byDay[$day]['visitors'] ?? 0,
             ];
         }
 
-        $visitorsByDay = [];
-        foreach ($rows as $row) {
-            $day = $row->getCreatedAt()->format('Y-m-d');
-            if (!isset($series[$day])) {
-                continue;
-            }
-
-            ++$series[$day]['views'];
-
-            $hash = $row->getIpHash();
-            if (null !== $hash && '' !== $hash && !isset($visitorsByDay[$day][$hash])) {
-                $visitorsByDay[$day][$hash] = true;
-                ++$series[$day]['visitors'];
-            }
-        }
-
-        return ['days' => $days, 'series' => array_values($series)];
+        return [
+            'site' => $this->siteKey,
+            'days' => $days,
+            'series' => $series,
+        ];
     }
 
     /**
@@ -82,7 +80,7 @@ final class StatsService
      */
     public function topPages(int $limit = 10, int $days = 30): array
     {
-        return $this->aggregateBy($this->startOfPeriod($days), $limit, static fn ($row) => $row->getPath());
+        return $this->group('path', 'Unbekannt', $limit, $days);
     }
 
     /**
@@ -90,7 +88,7 @@ final class StatsService
      */
     public function referrers(int $limit = 10, int $days = 30): array
     {
-        return $this->aggregateBy($this->startOfPeriod($days), $limit, static fn ($row) => self::referrerHost($row->getReferrer()));
+        return $this->group('referrer', 'Direkt', $limit, $days);
     }
 
     /**
@@ -98,7 +96,7 @@ final class StatsService
      */
     public function browsers(int $limit = 10, int $days = 30): array
     {
-        return $this->aggregateBy($this->startOfPeriod($days), $limit, static fn ($row) => $row->getBrowser() ?? 'Unbekannt');
+        return $this->group('browser', 'Unbekannt', $limit, $days);
     }
 
     /**
@@ -106,53 +104,35 @@ final class StatsService
      */
     public function devices(int $limit = 10, int $days = 30): array
     {
-        return $this->aggregateBy($this->startOfPeriod($days), $limit, static fn ($row) => $row->getDevice() ?? 'Unbekannt');
+        return $this->group('device', 'Unbekannt', $limit, $days);
     }
 
     /**
-     * @param callable $key
-     *
      * @return array<string, mixed>
      */
-    private function aggregateBy(\DateTimeImmutable $since, int $limit, callable $key): array
+    private function group(string $column, string $nullLabel, int $limit, int $days): array
     {
-        $rows = $this->repository->findSince($since);
-
-        $counts = [];
-        $total = 0;
-        foreach ($rows as $row) {
-            $name = $key($row);
-            $counts[$name] = ($counts[$name] ?? 0) + 1;
-            ++$total;
-        }
-
-        arsort($counts);
+        $from = $this->startOfPeriod($days);
+        $total = $this->repository->countViewsForSite($this->siteKey, $from);
 
         $items = [];
-        foreach (\array_slice($counts, 0, max($limit, 1), true) as $name => $views) {
+        foreach ($this->repository->groupForSite($this->siteKey, $from, $column, $limit, $nullLabel) as $row) {
             $items[] = [
-                'name' => $name,
-                'views' => $views,
-                'share' => 0 === $total ? 0 : round($views / $total * 100, 1),
+                'name' => $row['name'],
+                'views' => $row['views'],
+                'share' => 0 === $total ? 0 : round($row['views'] / $total * 100, 1),
             ];
         }
 
-        return ['total' => $total, 'items' => $items];
-    }
-
-    private static function referrerHost(?string $referrer): string
-    {
-        if (null === $referrer || '' === $referrer) {
-            return 'Direkt';
-        }
-
-        $host = parse_url($referrer, PHP_URL_HOST);
-
-        return \is_string($host) && '' !== $host ? $host : 'Direkt';
+        return [
+            'site' => $this->siteKey,
+            'total' => $total,
+            'items' => $items,
+        ];
     }
 
     private function startOfPeriod(int $days): \DateTimeImmutable
     {
-        return (new \DateTimeImmutable('today'))->modify(sprintf('-%d days', max($days, 1) - 1));
+        return (new \DateTimeImmutable('today'))->modify(\sprintf('-%d days', max($days, 1) - 1));
     }
 }
