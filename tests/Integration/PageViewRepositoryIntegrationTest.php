@@ -4,6 +4,7 @@ namespace Jenssmit\AnalyticsBundle\Tests\Integration;
 
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
+use Doctrine\DBAL\Tools\DsnParser;
 use Doctrine\ORM\EntityManager;
 use Doctrine\ORM\ORMSetup;
 use Jenssmit\AnalyticsBundle\Entity\PageView;
@@ -36,7 +37,12 @@ final class PageViewRepositoryIntegrationTest extends TestCase
         }
 
         $ormConfig = ORMSetup::createXMLMetadataConfiguration([__DIR__.'/../../config/doctrine'], true);
-        $connection = DriverManager::getConnection(['url' => $databaseUrl], $ormConfig);
+        $connectionParams = (new DsnParser([
+            'mysql' => 'pdo_mysql',
+            'postgresql' => 'pdo_pgsql',
+            'sqlite' => 'pdo_sqlite',
+        ]))->parse($databaseUrl);
+        $connection = DriverManager::getConnection($connectionParams, $ormConfig);
 
         $connection->executeStatement('DROP TABLE IF EXISTS jenssmit_page_view');
         foreach ((new SchemaProvider())->createTableStatements($connection) as $statement) {
@@ -207,9 +213,6 @@ final class PageViewRepositoryIntegrationTest extends TestCase
         self::assertSame(0, $this->repository->countBeforeAll(new \DateTimeImmutable('-5 days')));
     }
 
-    /**
-     * @param array<string, mixed> $extraPayload
-     */
     private function track(
         string $siteKey,
         string $path,
