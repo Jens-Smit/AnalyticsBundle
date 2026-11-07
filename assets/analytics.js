@@ -60,13 +60,16 @@
     function send(url, payload) {
         var body = JSON.stringify(payload);
 
-        if (global.navigator && typeof global.navigator.sendBeacon === 'function') {
-            global.navigator.sendBeacon(url, body);
+        if (
+            global.navigator &&
+            typeof global.navigator.sendBeacon === 'function' &&
+            global.navigator.sendBeacon(url, body)
+        ) {
             return;
         }
 
         if (typeof global.fetch === 'function') {
-            fetch(url, {
+            global.fetch(url, {
                 method: 'POST',
                 keepalive: true,
                 headers: { 'Content-Type': 'application/json' },

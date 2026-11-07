@@ -21,6 +21,7 @@ final class JenssmitAnalyticsExtension extends Extension
         $container->setParameter('jenssmit_analytics.hash_secret', $config['hash_secret']);
         $container->setParameter('jenssmit_analytics.retention_days', $config['retention_days']);
         $container->setParameter('jenssmit_analytics.record_user_identifier', $config['record_user_identifier']);
+        $container->setParameter('jenssmit_analytics.async_recording', $config['async_recording']);
         $container->setParameter('jenssmit_analytics.record_event_values', $config['record_event_values']);
         $container->setParameter('jenssmit_analytics.track_only_successful', $config['track_only_successful']);
         $container->setParameter('jenssmit_analytics.page_view_mode', $config['page_view_mode']);

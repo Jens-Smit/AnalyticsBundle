@@ -10,6 +10,7 @@ use Jenssmit\AnalyticsBundle\Service\EventNameValidator;
 use Jenssmit\AnalyticsBundle\Service\EventValueNormalizer;
 use Jenssmit\AnalyticsBundle\Service\IpAnonymizer;
 use Jenssmit\AnalyticsBundle\Service\PathNormalizer;
+use Jenssmit\AnalyticsBundle\Service\PrivacyPolicy;
 use Jenssmit\AnalyticsBundle\Service\SystemClock;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
@@ -27,11 +28,19 @@ final class AnalyticsEventRecorderTest extends TestCase
     /**
      * @param array<string, mixed> $overrides
      */
+    /**
+     * @param array<string, mixed> $overrides
+     */
     private function createRecorder(array $overrides = []): AnalyticsEventRecorder
     {
         return new AnalyticsEventRecorder(
             $this->repository,
-            new BotDetector(),
+            new PrivacyPolicy(
+                new BotDetector(),
+                $overrides['exclude_bots'] ?? true,
+                $overrides['respect_dnt'] ?? true,
+                $overrides['respect_gpc'] ?? true,
+            ),
             new PathNormalizer(),
             new IpAnonymizer(),
             new EventNameValidator(),
@@ -116,6 +125,32 @@ final class AnalyticsEventRecorderTest extends TestCase
         self::assertFalse($recorder->record($bot, ['name' => 'valid_name']));
         self::assertFalse($recorder->record($dnt, ['name' => 'valid_name']));
         self::assertFalse($recorder->record($gpc, ['name' => 'valid_name']));
+    }
+
+    public function testPrivacyOptionsApplyIdenticallyToPageViewsAndEvents(): void
+    {
+        $dnt = Request::create('/checkout', 'GET', [], [], [], [
+            'HTTP_USER_AGENT' => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+            'HTTP_DNT' => '1',
+            'REMOTE_ADDR' => '192.168.178.42',
+        ]);
+        $bot = Request::create('/checkout', 'GET', [], [], [], [
+            'HTTP_USER_AGENT' => 'curl/8.5.0',
+            'REMOTE_ADDR' => '192.168.178.42',
+        ]);
+
+        // respektierte Signale ablehnen ...
+        $this->repository->expects(self::never())->method('save');
+        self::assertFalse($this->createRecorder()->record($dnt, ['name' => 'valid_name']));
+        self::assertFalse($this->createRecorder()->record($bot, ['name' => 'valid_name']));
+
+        // ... und bei deaktivierter Option erfassen.
+        $this->repository = $this->createMock(AnalyticsEventRepository::class);
+        $this->repository->expects(self::exactly(2))->method('save');
+
+        $recorder = $this->createRecorder(['respect_dnt' => false, 'exclude_bots' => false]);
+        self::assertTrue($recorder->record($dnt, ['name' => 'valid_name']));
+        self::assertTrue($recorder->record($bot, ['name' => 'valid_name']));
     }
 
     public function testValuesAreOnlyStoredWhenEnabled(): void

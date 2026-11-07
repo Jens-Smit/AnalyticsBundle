@@ -3,6 +3,7 @@
 namespace Jenssmit\AnalyticsBundle\Service;
 
 use Jenssmit\AnalyticsBundle\Entity\PageView;
+use Jenssmit\AnalyticsBundle\Message\RecordPageViewMessage;
 use Jenssmit\AnalyticsBundle\Repository\PageViewRepository;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
@@ -18,8 +19,8 @@ use Symfony\Component\Security\Core\User\UserInterface;
  * Nicht gespeichert werden: rohe IP-Adressen, User-Agent-Zeichenketten,
  * vollständige Referrer-URLs, Query-Parameter oder Fragmente.
  *
- * Bots werden über den BotDetector erkannt und standardmäßig nicht
- * erfasst. DNT- und Sec-GPC-Signale werden respektiert. Server-Tracking
+ * Die zentrale PrivacyPolicy schließt Bots aus und respektiert DNT
+ * und Sec-GPC. DNT- und Sec-GPC-Signale werden respektiert. Server-Tracking
  * und Collect-Endpunkt laufen über denselben Recorder und werden
  * identisch behandelt.
  */
@@ -34,7 +35,7 @@ class PageViewRecorder
         private readonly PathNormalizer $pathNormalizer,
         private readonly ReferrerNormalizer $referrerNormalizer,
         private readonly IpAnonymizer $ipAnonymizer,
-        private readonly BotDetector $botDetector,
+        private readonly PrivacyPolicy $privacyPolicy,
         private readonly TrafficSourceClassifier $trafficSourceClassifier,
         private readonly CampaignParameterNormalizer $campaignParameterNormalizer,
         private readonly TokenStorageInterface $tokenStorage,
@@ -43,9 +44,8 @@ class PageViewRecorder
         private readonly string $hashSecret,
         private readonly array $excludedPaths,
         private readonly bool $recordUserIdentifier,
-        private readonly bool $excludeBots,
-        private readonly bool $respectDnt,
-        private readonly bool $respectGpc,
+        private readonly ?\Symfony\Component\Messenger\MessageBusInterface $messageBus = null,
+        private readonly bool $asyncRecording = false,
     ) {
     }
 
@@ -53,25 +53,21 @@ class PageViewRecorder
      * Erfasst einen Seitenaufruf. Gibt false zurück, wenn der Pfad
      * ungültig ist oder ausgeschlossen wurde; in diesem Fall wird
      * nichts gespeichert.
-     */
-    /**
+     *
+     * Im asynchronen Modus (async_recording, benötigt Messenger) wird
+     * eine normalisierte Nachricht dispatcht statt direkt zu
+     * speichern; ohne Messenger-Abhängigkeit läuft die Erfassung
+     * synchron.
+     *
      * @param array<string, mixed>|null $campaign Optionale Kampagnen-Parameter (utm_source, utm_medium, utm_campaign); ohne Angabe werden sie aus den Query-Parametern der aktuellen Anfrage abgeleitet
      */
     public function record(Request $request, ?string $path = null, ?string $referrer = null, ?array $campaign = null): bool
     {
+        if (!$this->privacyPolicy->allowsRecording($request)) {
+            return false;
+        }
+
         $userAgent = $request->headers->get('User-Agent');
-
-        if ($this->excludeBots && $this->botDetector->isBot($userAgent)) {
-            return false;
-        }
-
-        if ($this->respectDnt && '1' === $request->headers->get('DNT')) {
-            return false;
-        }
-
-        if ($this->respectGpc && '1' === $request->headers->get('Sec-GPC')) {
-            return false;
-        }
 
         $normalizedPath = $this->pathNormalizer->normalize($path ?? $request->getPathInfo());
 
@@ -112,7 +108,30 @@ class PageViewRecorder
             ? null
             : $this->ipAnonymizer->hash($anonymizedIp, $now, $this->hashSecret);
 
-        $pageView = PageView::create(
+        $userIdentifier = $this->resolveUserIdentifier();
+
+        if ($this->asyncRecording && null !== $this->messageBus) {
+            $this->messageBus->dispatch(new RecordPageViewMessage(
+                $this->siteKey,
+                $normalizedPath,
+                $now,
+                $route,
+                $referrerHost,
+                $classification['browser'],
+                $classification['operating_system'],
+                $classification['device'],
+                $ipHash,
+                $userIdentifier,
+                $source,
+                $campaignParameters['utm_source'],
+                $campaignParameters['utm_medium'],
+                $campaignParameters['utm_campaign'],
+            ));
+
+            return true;
+        }
+
+        $this->repository->save(PageView::create(
             $this->siteKey,
             $normalizedPath,
             $now,
@@ -122,14 +141,12 @@ class PageViewRecorder
             $classification['operating_system'],
             $classification['device'],
             $ipHash,
-            $this->resolveUserIdentifier(),
+            $userIdentifier,
             $source,
             $campaignParameters['utm_source'],
             $campaignParameters['utm_medium'],
             $campaignParameters['utm_campaign'],
-        );
-
-        $this->repository->save($pageView);
+        ));
 
         return true;
     }

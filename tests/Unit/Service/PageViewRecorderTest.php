@@ -3,12 +3,14 @@
 namespace Jenssmit\AnalyticsBundle\Tests\Unit\Service;
 
 use Jenssmit\AnalyticsBundle\Entity\PageView;
+use Jenssmit\AnalyticsBundle\Message\RecordPageViewMessage;
 use Jenssmit\AnalyticsBundle\Repository\PageViewRepository;
 use Jenssmit\AnalyticsBundle\Service\BotDetector;
 use Jenssmit\AnalyticsBundle\Service\CampaignParameterNormalizer;
 use Jenssmit\AnalyticsBundle\Service\IpAnonymizer;
 use Jenssmit\AnalyticsBundle\Service\PageViewRecorder;
 use Jenssmit\AnalyticsBundle\Service\PathNormalizer;
+use Jenssmit\AnalyticsBundle\Service\PrivacyPolicy;
 use Jenssmit\AnalyticsBundle\Service\ReferrerNormalizer;
 use Jenssmit\AnalyticsBundle\Service\SystemClock;
 use Jenssmit\AnalyticsBundle\Service\TrafficSourceClassifier;
@@ -46,7 +48,12 @@ final class PageViewRecorderTest extends TestCase
             new PathNormalizer(),
             new ReferrerNormalizer(),
             new IpAnonymizer(),
-            new BotDetector($overrides['bot_patterns'] ?? [], $overrides['bot_exceptions'] ?? []),
+            new PrivacyPolicy(
+                new BotDetector($overrides['bot_patterns'] ?? [], $overrides['bot_exceptions'] ?? []),
+                $overrides['exclude_bots'] ?? true,
+                $overrides['respect_dnt'] ?? true,
+                $overrides['respect_gpc'] ?? true,
+            ),
             new TrafficSourceClassifier(),
             new CampaignParameterNormalizer($overrides['campaign_allowlist'] ?? []),
             $tokenStorage,
@@ -55,9 +62,8 @@ final class PageViewRecorderTest extends TestCase
             'unit-test-hash-secret',
             $overrides['excluded_paths'] ?? ['/health'],
             $recordUserIdentifier,
-            $overrides['exclude_bots'] ?? true,
-            $overrides['respect_dnt'] ?? true,
-            $overrides['respect_gpc'] ?? true,
+            $overrides['message_bus'] ?? null,
+            $overrides['async_recording'] ?? false,
         );
     }
 
@@ -282,6 +288,34 @@ final class PageViewRecorderTest extends TestCase
 
         self::assertInstanceOf(PageView::class, $captured);
         self::assertSame('jens@example.com', $captured->getUserIdentifier());
+    }
+
+    public function testAsyncRecordingDispatchesANormalizedMessage(): void
+    {
+        $this->repository->expects(self::never())->method('save');
+
+        $messageBus = $this->createMock(\Symfony\Component\Messenger\MessageBusInterface::class);
+        $messageBus
+            ->expects(self::once())
+            ->method('dispatch')
+            ->with(self::isInstanceOf(RecordPageViewMessage::class))
+            ->willReturnCallback(static fn (object $message): \Symfony\Component\Messenger\Envelope => new \Symfony\Component\Messenger\Envelope($message));
+
+        $recorder = $this->createRecorder(false, null, [
+            'message_bus' => $messageBus,
+            'async_recording' => true,
+        ]);
+
+        self::assertTrue($recorder->record($this->createRequest()));
+    }
+
+    public function testAsyncRecordingFallsBackToSyncWithoutBus(): void
+    {
+        $this->repository->expects(self::once())->method('save');
+
+        $recorder = $this->createRecorder(false, null, ['async_recording' => true]);
+
+        self::assertTrue($recorder->record($this->createRequest()));
     }
 
     public function testUserIdentifierIsNullWhenDisabledEvenIfLoggedIn(): void

@@ -21,12 +21,14 @@ use Jenssmit\AnalyticsBundle\Service\EventValueNormalizer;
 use Jenssmit\AnalyticsBundle\Service\IpAnonymizer;
 use Jenssmit\AnalyticsBundle\Service\PageViewRecorder;
 use Jenssmit\AnalyticsBundle\Service\PathNormalizer;
+use Jenssmit\AnalyticsBundle\Service\PrivacyPolicy;
 use Jenssmit\AnalyticsBundle\Service\ReferrerNormalizer;
 use Jenssmit\AnalyticsBundle\Service\SchemaProvider;
 use Jenssmit\AnalyticsBundle\Service\StatsService;
 use Jenssmit\AnalyticsBundle\Service\SystemClock;
 use Jenssmit\AnalyticsBundle\Service\TrafficSourceClassifier;
 use Jenssmit\AnalyticsBundle\Service\UserAgentParser;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\Lock\LockFactory;
@@ -52,6 +54,11 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$additionalPatterns', '%jenssmit_analytics.bot_patterns%')
         ->arg('$exceptions', '%jenssmit_analytics.bot_exceptions%');
 
+    $services->set(PrivacyPolicy::class)
+        ->arg('$excludeBots', '%jenssmit_analytics.exclude_bots%')
+        ->arg('$respectDnt', '%jenssmit_analytics.respect_dnt%')
+        ->arg('$respectGpc', '%jenssmit_analytics.respect_gpc%');
+
     $services->set(CampaignParameterNormalizer::class)
         ->arg('$allowlist', '%jenssmit_analytics.campaign_allowlist%');
 
@@ -62,9 +69,8 @@ return static function (ContainerConfigurator $container): void {
         ->arg('$hashSecret', '%jenssmit_analytics.hash_secret%')
         ->arg('$excludedPaths', '%jenssmit_analytics.excluded_paths%')
         ->arg('$recordUserIdentifier', '%jenssmit_analytics.record_user_identifier%')
-        ->arg('$excludeBots', '%jenssmit_analytics.exclude_bots%')
-        ->arg('$respectDnt', '%jenssmit_analytics.respect_dnt%')
-        ->arg('$respectGpc', '%jenssmit_analytics.respect_gpc%');
+        ->arg('$messageBus', new Reference('messenger.bus.default', ContainerInterface::NULL_ON_INVALID_REFERENCE))
+        ->arg('$asyncRecording', '%jenssmit_analytics.async_recording%');
 
     $services->set(AnalyticsEventRecorder::class)
         ->arg('$siteKey', '%jenssmit_analytics.site_key%')

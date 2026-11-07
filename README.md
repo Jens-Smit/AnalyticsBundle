@@ -14,7 +14,7 @@ Wichtig: Dieses Bundle erfasst bewusst weniger Daten als klassische Analysewerkz
 - Datensparsame Standardkonfiguration: keine Cookies, keine Login-Identifier, keine rohen IP-Adressen, keine User-Agent-Speicherung.
 - IP-Kürzung: IPv4 auf /24-Netzpräfix, IPv6 auf /64-Netzpräfix, zusätzlich tagesbezogenes Pseudonym über HMAC-SHA256 mit geheimem Hash-Secret.
 - Erfassung wahlweise serverseitig über `kernel.terminate` oder über den Collect-Endpunkt (Beacon/fetch); `page_view_mode` verhindert Doppelzählung.
-- Bot-Ausschluss mit konfigurierbaren Mustern und Ausnahmen; DNT und Sec-GPC werden standardmäßig respektiert.
+- Bot-Ausschluss mit konfigurierbaren Mustern und Ausnahmen; DNT und Sec-GPC werden standardmäßig respektiert. Die zentrale `PrivacyPolicy` gilt einheitlich für PageViews und Custom Events.
 - Traffic-Attribution: Quellen (`direct`, `search`, `social`, `internal`, `referral`, `campaign`) und normalisierte UTM-Parameter.
 - Custom Events über einen gleich geschützten Endpunkt, mit strenger Namensvalidierung.
 - Abgesicherter Collect-Endpunkt: Origin-Allowlist, Request-Größenlimit, Content-Type-Prüfung, atomares Rate-Limiting, strikte Pfad- und Referrer-Validierung.
@@ -119,9 +119,16 @@ jenssmit_analytics:
     bot_patterns: []
     bot_exceptions: []
 
-    # Optional: erlaubte utm_source-Werte. Leer bedeutet keine
-    # Allowlist-Prüfung; Werte werden immer normalisiert und gekürzt.
+    # Optional: erlaubte utm_source-Werte. Die Allowlist gilt
+    # ausschließlich für utm_source (Quellen-Allowlist); utm_medium und
+    # utm_campaign werden unabhängig davon nur normalisiert und
+    # gekürzt. Leer bedeutet keine Allowlist-Prüfung.
     campaign_allowlist: []
+
+    # Asynchrones Recording: PageViews werden als Messenger-Nachricht
+    # dispatcht statt direkt gespeichert. Benötigt symfony/messenger;
+    # ohne Messenger läuft die Erfassung synchron (Standard: false).
+    async_recording: false
 
     # Event-Werte speichern? Standard: false. Aktiviert bedeutet:
     # normalisierte, gekürzte Werte (max. 100 Zeichen).
@@ -243,7 +250,7 @@ Alle Antworten folgen dem einheitlichen Vertrag aus `site`, `period`, `data` und
 }
 ```
 
-Der Export liefert ausschließlich aggregierte Daten, mandantenbezogen und mit denselben Rechten wie die Statistik-Endpunkte; CSV wird als Stream ausgeliefert:
+Der Export liefert ausschließlich aggregierte Daten, mandantenbezogen und mit denselben Rechten wie die Statistik-Endpunkte. CSV-Zeilen werden als Generator direkt in den Response-Stream geschrieben; die Exportmenge ist über `limit` (max. 100) und `days` (max. `max_report_days`) begrenzt:
 
 ```
 GET /analytics/stats/export?report=top-pages&format=csv&days=30&limit=100
@@ -285,7 +292,14 @@ Bei `page_view_mode: 'client'` sendet das SDK die Seitenaufrufe (mit `autoPageVi
 
 ## Asynchrone Erfassung (optional)
 
-Mit `symfony/messenger` kann die Speicherung asynchron erfolgen. Die Nachricht `RecordPageViewMessage` enthält ausschließlich normalisierte Daten (keine rohen IPs, keine User-Agents). Der Handler wird nur registriert, wenn Messenger installiert ist; das synchrone Recording bleibt Standard und liefert dieselbe Semantik. Bei Retries kann dieselbe Nachricht zweimal gespeichert werden (at-least-once); Duplikate beeinflussen nur Zählermetriken minimal.
+Mit `async_recording: true` und installiertem `symfony/messenger` dispatcht der `PageViewRecorder` die normalisierte Nachricht `RecordPageViewMessage` statt direkt zu speichern; der `RecordPageViewHandler` persistiert sie. Die Nachricht enthält ausschließlich normalisierte Daten: keine rohen IP-Adressen, keine User-Agent-Zeichenketten, keine vollständigen Referrer-URLs und keine Query-Parameter.
+
+Verhalten und Grenzen:
+
+- Ohne Messenger-Abhängigkeit oder mit deaktivierter Option läuft die Erfassung synchron – der Standardbetrieb funktioniert vollständig ohne Messenger.
+- Messenger arbeitet mit At-least-once-Zustellung: Ein Retry kann dieselbe Nachricht mehrfach verarbeiten. Duplikate beeinflussen nur Zählermetriken minimal; wer exakte Zähler benötigt, sollte eine Idempotenzstrategie (stabile Event-ID oder Idempotency-Key) ergänzen.
+- Custom Events werden im ersten Release synchron gespeichert.
+- Das Routing der Nachricht ist in der Anwendung zu konfigurieren (Transport, Retry, Failure-Strategie).
 
 ## Support-Matrix
 
