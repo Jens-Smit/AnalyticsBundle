@@ -3,7 +3,6 @@
 namespace Jenssmit\AnalyticsBundle\Tests\Unit\Controller;
 
 use Jenssmit\AnalyticsBundle\Controller\CollectController;
-use Jenssmit\AnalyticsBundle\Repository\PageViewRepository;
 use Jenssmit\AnalyticsBundle\Service\CollectRateLimiter;
 use Jenssmit\AnalyticsBundle\Service\IpAnonymizer;
 use Jenssmit\AnalyticsBundle\Service\PageViewRecorder;

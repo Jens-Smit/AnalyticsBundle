@@ -33,6 +33,9 @@ final class CollectController
 {
     private const ALLOWED_CONTENT_TYPES = ['application/json', 'text/plain'];
 
+    /**
+     * @param list<string> $allowedOrigins
+     */
     public function __construct(
         private readonly PageViewRecorder $recorder,
         private readonly CollectRateLimiter $rateLimiter,
@@ -92,7 +95,7 @@ final class CollectController
         return $this->withCorsHeaders(new Response(status: Response::HTTP_NO_CONTENT), $request);
     }
 
-    private function error(string $message, Request $request, int $status): JsonResponse
+    private function error(string $message, Request $request, int $status): Response
     {
         return $this->withCorsHeaders(new JsonResponse(['error' => $message], $status), $request);
     }

@@ -15,7 +15,7 @@ use Psr\Cache\CacheItemPoolInterface;
  * Angriffen, da nicht-browserbasierte Clients jede Herkunft fälschen
  * können.
  */
-final class CollectRateLimiter
+class CollectRateLimiter
 {
     private const CACHE_PREFIX = 'jenssmit_analytics.rate_limit.';
 

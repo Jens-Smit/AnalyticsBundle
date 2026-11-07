@@ -7,15 +7,15 @@
         <id name="id" type="integer">
             <generator strategy="AUTO"/>
         </id>
-        <field name="siteKey" length="32"/>
-        <field name="path" length="500"/>
-        <field name="createdAt" type="datetime_immutable"/>
-        <field name="route" length="190" nullable="true"/>
-        <field name="referrer" length="255" nullable="true"/>
-        <field name="browser" length="32" nullable="true"/>
-        <field name="operatingSystem" length="32" nullable="true"/>
-        <field name="device" length="16" nullable="true"/>
-        <field name="ipHash" length="64" nullable="true"/>
-        <field name="userIdentifier" length="191" nullable="true"/>
+        <field name="siteKey" column="site_key" length="32"/>
+        <field name="path" column="path" length="500"/>
+        <field name="createdAt" column="created_at" type="datetime_immutable"/>
+        <field name="route" column="route" length="190" nullable="true"/>
+        <field name="referrer" column="referrer" length="255" nullable="true"/>
+        <field name="browser" column="browser" length="32" nullable="true"/>
+        <field name="operatingSystem" column="operating_system" length="32" nullable="true"/>
+        <field name="device" column="device" length="16" nullable="true"/>
+        <field name="ipHash" column="ip_hash" length="64" nullable="true"/>
+        <field name="userIdentifier" column="user_identifier" length="191" nullable="true"/>
     </entity>
 </doctrine-mapping>

@@ -4,8 +4,11 @@ namespace Jenssmit\AnalyticsBundle\Tests\Integration;
 
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
+use Doctrine\DBAL\Tools\DsnParser;
 use Doctrine\ORM\EntityManager;
+use Doctrine\ORM\Mapping\Driver\XmlDriver;
 use Doctrine\ORM\ORMSetup;
+use Doctrine\Persistence\Mapping\Driver\SymfonyFileLocator;
 use Jenssmit\AnalyticsBundle\Entity\PageView;
 use Jenssmit\AnalyticsBundle\Repository\PageViewRepository;
 use Jenssmit\AnalyticsBundle\Service\SchemaProvider;
@@ -35,8 +38,17 @@ final class PageViewRepositoryIntegrationTest extends TestCase
             return;
         }
 
-        $ormConfig = ORMSetup::createXMLMetadataConfiguration([__DIR__.'/../../config/doctrine'], true);
-        $connection = DriverManager::getConnection(['url' => $databaseUrl], $ormConfig);
+        $ormConfig = ORMSetup::createXMLMetadataConfiguration([], true);
+        $ormConfig->setMetadataDriverImpl(new XmlDriver(
+            new SymfonyFileLocator([__DIR__.'/../../config/doctrine' => 'Jenssmit\AnalyticsBundle\Entity'], '.orm.xml'),
+            '.orm.xml',
+        ));
+        $connectionParams = (new DsnParser([
+            'mysql' => 'pdo_mysql',
+            'postgresql' => 'pdo_pgsql',
+            'sqlite' => 'pdo_sqlite',
+        ]))->parse($databaseUrl);
+        $connection = DriverManager::getConnection($connectionParams, $ormConfig);
 
         $connection->executeStatement('DROP TABLE IF EXISTS jenssmit_page_view');
         foreach ((new SchemaProvider())->createTableStatements($connection) as $statement) {
@@ -207,9 +219,6 @@ final class PageViewRepositoryIntegrationTest extends TestCase
         self::assertSame(0, $this->repository->countBeforeAll(new \DateTimeImmutable('-5 days')));
     }
 
-    /**
-     * @param array<string, mixed> $extraPayload
-     */
     private function track(
         string $siteKey,
         string $path,

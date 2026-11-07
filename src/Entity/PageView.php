@@ -19,7 +19,7 @@ final class PageView
         #[ORM\Id]
         #[ORM\Column(type: 'integer')]
         #[ORM\GeneratedValue]
-        private readonly ?int $id = null,
+        private ?int $id = null,
         #[ORM\Column(length: 32)]
         private readonly ?string $siteKey = null,
         #[ORM\Column(length: 500)]

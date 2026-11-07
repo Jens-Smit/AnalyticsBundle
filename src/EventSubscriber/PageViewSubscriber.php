@@ -31,7 +31,7 @@ final class PageViewSubscriber implements EventSubscriberInterface
 
         $request = $event->getRequest();
 
-        if (!$request->isMethodSafe(false)) {
+        if (!$request->isMethodSafe()) {
             return;
         }
 
