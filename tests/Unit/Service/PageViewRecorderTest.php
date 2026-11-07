@@ -3,11 +3,11 @@
 namespace Jenssmit\AnalyticsBundle\Tests\Unit\Service;
 
 use Jenssmit\AnalyticsBundle\Entity\PageView;
+use Jenssmit\AnalyticsBundle\Message\RecordPageViewMessage;
 use Jenssmit\AnalyticsBundle\Repository\PageViewRepository;
 use Jenssmit\AnalyticsBundle\Service\BotDetector;
 use Jenssmit\AnalyticsBundle\Service\CampaignParameterNormalizer;
 use Jenssmit\AnalyticsBundle\Service\IpAnonymizer;
-use Jenssmit\AnalyticsBundle\Message\RecordPageViewMessage;
 use Jenssmit\AnalyticsBundle\Service\PageViewRecorder;
 use Jenssmit\AnalyticsBundle\Service\PrivacyPolicy;
 use Jenssmit\AnalyticsBundle\Service\PathNormalizer;
