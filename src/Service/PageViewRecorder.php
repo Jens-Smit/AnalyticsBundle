@@ -20,6 +20,9 @@ use Symfony\Component\Security\Core\User\UserInterface;
  */
 final class PageViewRecorder
 {
+    /**
+     * @param list<string> $excludedPaths
+     */
     public function __construct(
         private readonly PageViewRepository $repository,
         private readonly UserAgentParser $userAgentParser,
@@ -122,8 +125,6 @@ final class PageViewRecorder
             return null;
         }
 
-        $identifier = $user->getUserIdentifier();
-
-        return '' === $identifier ? null : mb_substr($identifier, 0, 191);
+        return mb_substr($user->getUserIdentifier(), 0, 191);
     }
 }
