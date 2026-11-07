@@ -152,8 +152,8 @@ final class CollectController
     {
         $contentType = $request->headers->get('Content-Type');
 
-        if (null === $contentType || '' === $contentType) {
-            return true;
+        if (null === $contentType || '' === trim($contentType)) {
+            return false;
         }
 
         $mimePart = strstr($contentType, ';', true);

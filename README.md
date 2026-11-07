@@ -110,7 +110,7 @@ php bin/console analytics:install
 
 Unterstützt werden MySQL/MariaDB, PostgreSQL und SQLite. Bei einer nicht unterstützten Plattform bricht der Befehl mit einer klaren Fehlermeldung ab, ohne etwas zu verändern.
 
-Wer Doctrine-Migrations nutzt, kann die Tabelle alternativ über `doctrine:migrations:diff` in das eigene Migrationsystem übernehmen; dazu muss das Bundle-Mapping registriert sein (`doctrine.orm.auto_mapping: true` genügt in der Regel, da das Bundle sein Mapping unter `config/doctrine/` mitbringt).
+Wer Doctrine-Migrations nutzt, kann die Tabelle alternativ über `doctrine:migrations:diff` in das eigene Migrationsystem übernehmen; dazu muss das Bundle-Mapping registriert sein (`doctrine.orm.auto_mapping: true` genügt, da das Mapping als Attribute an der Entity in `src/Entity/` liegt).
 
 ## Erfassung
 
@@ -129,15 +129,29 @@ navigator.sendBeacon(
 );
 ```
 
-Der Endpunkt akzeptiert `POST` mit `application/json` oder `text/plain` und antwortet mit `204 No Content`. Schutzschichten:
+Der Endpunkt akzeptiert `POST` mit `application/json` oder `text/plain` (Parameter wie `charset` sind erlaubt) und antwortet mit `204 No Content`. Anfragen ohne Content-Type werden abgelehnt. Schutzschichten:
 
 1. Origin-Prüfung: Unbekannte Origins werden mit `403` abgelehnt. Antworten tragen `Vary: Origin`; `Access-Control-Allow-Origin` wird nur für ausdrücklich erlaubte Origins gesetzt.
 2. Request-Größenlimit (Standard 4096 Bytes, sonst `413`).
-3. Content-Type-Prüfung (sonst `415`).
-4. Rate-Limiting je anonymisiertem IP-Präfix und Stunde (Standard 360, sonst `429` mit `Retry-After`).
+3. Content-Type-Prüfung: nur `application/json` oder `text/plain`, fehlender oder unbekannter Content-Type wird abgelehnt (sonst `415`).
+4. Rate-Limiting je anonymisiertem IP-Präfix und Stunde (Standard 360, sonst `429` mit `Retry-After`). Prüfung und Inkrement sind atomar: sie laufen unter einem exklusiven Lock, parallele Anfragen desselben IP-Präfixes können das Limit nicht überholen.
 5. Strikte Validierung von Pfad und Referrer, sonst `400`.
 
 Sicherheitshinweis: Der Origin-Header ist kein Authentifizierungsmechanismus. Nicht-browserbasierte Clients können jeden Headerwert setzen. CORS schützt Browser, nicht vor automatisiertem Missbrauch; dafür sind Rate-Limiting und Validierung zuständig.
+
+#### Request-Größenlimit auf Infrastrukturebene
+
+Das applikationsseitige Limit (`collect_max_request_size`) greift erst, wenn die Anfrage PHP vollständig erreicht hat. Ein Angreifer kann den Webserver trotzdem mit großen Bodys beschäftigen. Betreiber sollten deshalb zusätzlich ein Limit auf Infrastrukturebene setzen, zum Beispiel:
+
+- nginx: `client_max_body_size 8k;` (Server- oder Location-Block des Collect-Endpunkts)
+- Apache: `LimitRequestBody 8192`
+- Reverse Proxies und Load Balancer (etwa Cloudflare, AWS ALB) bieten vergleichbare Grenzen
+
+Das Infrastruktur-Limit sollte großzügiger als das applikationsseitige Limit gewählt werden, damit legitime Anfragen nicht an der Infrastruktur scheitern, während übermäßig große Bodys gar nicht erst die Anwendung erreichen.
+
+#### Rate-Limiting in verteilten Setups
+
+Zähler liegt im Anwendungscache (`cache.app`), die Sperre standardmäßig im Dateisystem des Hosts (`FlockStore`). In verteilten Setups (mehrere Webserver) müssen Cache und Lock-Store gemeinsam genutzt werden, sonst gilt das Limit je Host. Dazu die Services `jenssmit_analytics.lock.factory` beziehungsweise `jenssmit_analytics.lock.store` mit einem gemeinsamen Store (etwa Redis) dekorieren oder ersetzen.
 
 ### Trusted Proxies
 
@@ -158,7 +172,7 @@ Alle Endpunkte erfordern die konfigurierte Rolle (`stats_role`, Standard `ROLE_A
 
 | Endpunkt | Parameter | Inhalt |
 | --- | --- | --- |
-| `GET /analytics/stats/summary` | `days` | Aufrufe, Besucher, Aufrufe pro Tag |
+| `GET /analytics/stats/summary` | `days` | Aufrufe, Besuche (Besuchstage), Aufrufe pro Tag |
 | `GET /analytics/stats/timeseries` | `days` | Lückenlose Tagesreihe |
 | `GET /analytics/stats/top-pages` | `limit`, `days` | Häufigste Pfade |
 | `GET /analytics/stats/referrers` | `limit`, `days` | Referrer-Hosts, `Direkt` ohne Referrer |
@@ -172,7 +186,7 @@ Beispielantwort für `summary`:
     "site": "restaurant_001",
     "period": { "from": "2026-10-09", "days": 30 },
     "views": 1234,
-    "unique_visitors": 421,
+    "visits": 421,
     "views_per_day": 41.13
 }
 ```
@@ -210,7 +224,7 @@ Was gespeichert wird und was nicht:
 | Pfad | Ohne Query-Parameter und Fragmente (schützt vor Tokens in URLs). |
 | Login-Identifier | Standardmäßig deaktiviert. |
 
-Einordnung des IP-Hashes: Der Hash ist ein Pseudonym, keine anonyme Kennung. Er ermöglicht Näherungen für wiederkehrende Besucher innerhalb eines Tages. Mit Kenntnis des Salts und des Präfixes ließe er sich für begrenzte Zeiträume rechnen. Betreiber, die stärkere Anonymisierung benötigen, können die Besucherzählung nicht verwenden und sollten nur Aufrufzahlen auswerten.
+Einordnung des IP-Hashes: Der Hash ist ein Pseudonym, keine anonyme Kennung. Er ist auf genau einen Kalendertag begrenzt und ermöglicht Näherungen für wiederkehrende Besucher innerhalb dieses Tages. Über mehrere Tage kann das Bundle deshalb keine eindeutigen Besucher, sondern nur Besuche (Besuchstage) zählen: Jeder Kalendertag mit einem Pseudonym zählt als ein Besuch. Ein dauerhaftes, geräteübergreifendes Unique-Visitor-Merkmal würde ein dauerhaftes Pseudonym erfordern und ist datenschutzrechtlich bewusst nicht umgesetzt. Mit Kenntnis des Salts und des Präfixes ließe er sich für begrenzte Zeiträume rechnen. Betreiber, die stärkere Anonymisierung benötigen, können die Besucherzählung nicht verwenden und sollten nur Aufrufzahlen auswerten.
 
 Wird `record_user_identifier` aktiviert, können personenbezogene Daten (z. B. E-Mail-Adressen) in die Datenbank gelangen. Diese Funktion erfordert eine datenschutzrechtliche Prüfung durch den Betreiber; als bloßer Bezeichner ist ein Login-Identifier keine harmlose Kennung.
 

@@ -18,6 +18,8 @@ use Jenssmit\AnalyticsBundle\Service\StatsService;
 use Jenssmit\AnalyticsBundle\Service\UserAgentParser;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\DependencyInjection\Reference;
+use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Lock\Store\FlockStore;
 
 return static function (ContainerConfigurator $container): void {
     $services = $container->services();
@@ -46,7 +48,14 @@ return static function (ContainerConfigurator $container): void {
 
     $services->set(CollectRateLimiter::class)
         ->arg('$cache', new Reference('cache.app'))
+        ->arg('$lockFactory', new Reference('jenssmit_analytics.lock.factory'))
         ->arg('$limit', '%jenssmit_analytics.collect_rate_limit%');
+
+    $services->set('jenssmit_analytics.lock.factory', LockFactory::class)
+        ->arg('$store', new Reference('jenssmit_analytics.lock.store'));
+
+    $services->set('jenssmit_analytics.lock.store', FlockStore::class)
+        ->arg('$lockDirectory', \sys_get_temp_dir());
 
     $services->set(CollectController::class)
         ->arg('$allowedOrigins', '%jenssmit_analytics.allowed_origins%')

@@ -209,4 +209,64 @@ final class CollectControllerTest extends TestCase
         self::assertSame(Response::HTTP_NO_CONTENT, $response->getStatusCode());
         self::assertNull($response->headers->get('Vary'));
     }
+
+    public function testRejectsMissingContentType(): void
+    {
+        $this->recorder->expects(self::never())->method('record');
+
+        $response = $this->createController()->__invoke($this->createRequest(
+            '{"path":"/blog"}',
+            ['HTTP_ORIGIN' => 'http://www.example.com'],
+        ));
+
+        self::assertSame(Response::HTTP_UNSUPPORTED_MEDIA_TYPE, $response->getStatusCode());
+    }
+
+    public function testRejectsEmptyContentType(): void
+    {
+        $this->recorder->expects(self::never())->method('record');
+
+        $response = $this->createController()->__invoke($this->createRequest(
+            '{"path":"/blog"}',
+            ['HTTP_ORIGIN' => 'http://www.example.com', 'CONTENT_TYPE' => '  '],
+        ));
+
+        self::assertSame(Response::HTTP_UNSUPPORTED_MEDIA_TYPE, $response->getStatusCode());
+    }
+
+    /**
+     * @dataProvider allowedContentTypeProvider
+     */
+    public function testAcceptsContentTypeVariants(string $contentType): void
+    {
+        $this->recorder->expects(self::once())->method('record')->willReturn(true);
+
+        $response = $this->createController()->__invoke($this->createRequest(
+            '{"path":"/blog"}',
+            ['HTTP_ORIGIN' => 'http://www.example.com', 'CONTENT_TYPE' => $contentType],
+        ));
+
+        self::assertSame(Response::HTTP_NO_CONTENT, $response->getStatusCode());
+    }
+
+    public static function allowedContentTypeProvider(): \Generator
+    {
+        yield 'JSON mit Charset' => ['application/json; charset=utf-8'];
+        yield 'Text mit Charset' => ['text/plain; charset=utf-8'];
+        yield 'Großschreibung' => ['APPLICATION/JSON'];
+        yield 'Führendes Leerzeichen' => [' text/plain'];
+    }
+
+    public function testRejectsPayloadThatIsNotAJsonObject(): void
+    {
+        $this->recorder->expects(self::never())->method('record');
+
+        $origin = ['HTTP_ORIGIN' => 'http://www.example.com', 'CONTENT_TYPE' => 'application/json'];
+
+        $list = $this->createController()->__invoke($this->createRequest('[1,2,3]', $origin));
+        $string = $this->createController()->__invoke($this->createRequest('"text"', $origin));
+
+        self::assertSame(Response::HTTP_BAD_REQUEST, $list->getStatusCode());
+        self::assertSame(Response::HTTP_BAD_REQUEST, $string->getStatusCode());
+    }
 }
