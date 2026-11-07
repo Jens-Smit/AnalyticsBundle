@@ -88,7 +88,7 @@ class CollectRequestGuard
         return $response;
     }
 
-    private function error(string $message, Request $request, int $status): JsonResponse
+    private function error(string $message, Request $request, int $status): Response
     {
         return $this->withCorsHeaders(new JsonResponse(['error' => $message], $status), $request);
     }

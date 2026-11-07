@@ -5,6 +5,9 @@
          failOnRisky="true"
          failOnWarning="true"
          cacheDirectory=".phpunit.cache">
+    <php>
+        <env name="SYMFONY_DEPRECATIONS_HELPER" value="max[direct]=5"/>
+    </php>
     <testsuites>
         <testsuite name="unit">
             <directory>tests/Unit</directory>

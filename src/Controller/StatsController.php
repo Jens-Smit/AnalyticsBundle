@@ -177,6 +177,11 @@ final class StatsController
     /**
      * @return list<list<string>>
      */
+    /**
+     * @param array<string, mixed> $data
+     *
+     * @return list<list<string>>
+     */
     private function flattenForCsv(array $data): array
     {
         $rows = [];

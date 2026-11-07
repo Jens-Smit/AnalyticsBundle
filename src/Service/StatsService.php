@@ -191,7 +191,7 @@ final class StatsService
     }
 
     /**
-     * @param callable():array<string, mixed> $callback
+     * @param callable():array<mixed> $callback
      *
      * @return array<string, mixed>
      */

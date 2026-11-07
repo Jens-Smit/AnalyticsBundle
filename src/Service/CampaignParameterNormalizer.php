@@ -28,6 +28,11 @@ final class CampaignParameterNormalizer
     /**
      * @return array{utm_source: ?string, utm_medium: ?string, utm_campaign: ?string}
      */
+    /**
+     * @param array<string, mixed>|null $campaign
+     *
+     * @return array{utm_source: ?string, utm_medium: ?string, utm_campaign: ?string}
+     */
     public function normalize(?array $campaign): array
     {
         return [
