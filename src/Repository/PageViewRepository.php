@@ -21,7 +21,7 @@ use Jenssmit\AnalyticsBundle\Entity\PageView;
  * Aggregationen bewusst als SQL: Die Datenbank zählt und gruppiert,
  * PHP lädt niemals vollständige PageView-Mengen in den Speicher.
  */
-final class PageViewRepository
+class PageViewRepository
 {
     private const GROUPABLE_COLUMNS = ['path', 'referrer', 'browser', 'device'];
     private const BATCH_SIZE = 1000;

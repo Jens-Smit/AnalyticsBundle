@@ -18,7 +18,7 @@ use Symfony\Component\Security\Core\User\UserInterface;
  * Nicht gespeichert werden: rohe IP-Adressen, User-Agent-Zeichenketten,
  * vollständige Referrer-URLs, Query-Parameter oder Fragmente.
  */
-final class PageViewRecorder
+class PageViewRecorder
 {
     /**
      * @param list<string> $excludedPaths
