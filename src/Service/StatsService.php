@@ -20,13 +20,18 @@ final class StatsService
     }
 
     /**
+     * Zusammenfassung des Zeitraums. "visits" zählt Besuche
+     * (Besuchstage): Da das IP-Pseudonym tagesbezogen ist, zählt jeder
+     * Kalendertag mit Pseudonym als ein Besuch, nicht jeder Besucher
+     * über den gesamten Zeitraum.
+     *
      * @return array<string, mixed>
      */
     public function summary(int $days = 30): array
     {
         $from = $this->startOfPeriod($days);
         $views = $this->repository->countViewsForSite($this->siteKey, $from);
-        $visitors = $this->repository->countVisitorsForSite($this->siteKey, $from);
+        $visits = $this->repository->countVisitsForSite($this->siteKey, $from);
 
         return [
             'site' => $this->siteKey,
@@ -35,7 +40,7 @@ final class StatsService
                 'days' => $days,
             ],
             'views' => $views,
-            'unique_visitors' => $visitors,
+            'visits' => $visits,
             'views_per_day' => 0 === $views ? 0 : round($views / max($days, 1), 2),
         ];
     }

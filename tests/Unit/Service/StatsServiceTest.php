@@ -30,7 +30,7 @@ final class StatsServiceTest extends TestCase
             ->willReturn(10);
         $this->repository
             ->expects(self::once())
-            ->method('countVisitorsForSite')
+            ->method('countVisitsForSite')
             ->with('site-a', self::anything())
             ->willReturn(6);
 
@@ -38,7 +38,7 @@ final class StatsServiceTest extends TestCase
 
         self::assertSame('site-a', $summary['site']);
         self::assertSame(10, $summary['views']);
-        self::assertSame(6, $summary['unique_visitors']);
+        self::assertSame(6, $summary['visits']);
         self::assertSame(0.33, $summary['views_per_day']);
     }
 

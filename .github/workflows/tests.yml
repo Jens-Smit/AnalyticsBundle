@@ -6,6 +6,48 @@ on:
     pull_request:
 
 jobs:
+    packaging:
+        name: Paketierung
+        runs-on: ubuntu-latest
+        steps:
+            - name: Repository auschecken
+              uses: actions/checkout@v4
+
+            - name: PHP einrichten
+              uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.3'
+                  coverage: none
+
+            - name: Composer-Manifest strikt validieren
+              run: composer validate --strict
+
+            - name: Installation aus einem fremden Projekt prüfen
+              run: |
+                  mkdir -p /tmp/consumer
+                  cat > /tmp/consumer/composer.json <<JSON
+                  {
+                      "name": "acme/consumer",
+                      "description": "Prüft die Installation des Analytics-Bundles als Abhängigkeit",
+                      "license": "MIT",
+                      "repositories": [
+                          {
+                              "type": "path",
+                              "url": "$PWD",
+                              "options": { "symlink": false }
+                          }
+                      ],
+                      "require": {
+                          "php": ">=8.2",
+                          "jenssmit/analytics-bundle": "@dev"
+                      }
+                  }
+                  JSON
+                  cd /tmp/consumer
+                  composer update --no-interaction --no-progress
+                  php -r "require 'vendor/autoload.php'; exit(class_exists('Jenssmit\\AnalyticsBundle\\JenssmitAnalyticsBundle') ? 0 : 1);"
+                  php -r "require 'vendor/autoload.php'; exit(class_exists('Jenssmit\\AnalyticsBundle\\Entity\\PageView') ? 0 : 1);"
+
     quality:
         name: Qualität (PHP ${{ matrix.php-version }})
         runs-on: ubuntu-latest
@@ -22,6 +64,7 @@ jobs:
               with:
                   php-version: ${{ matrix.php-version }}
                   coverage: none
+                  extensions: pdo_sqlite
 
             - name: Composer-Manifest validieren
               run: composer validate
@@ -37,6 +80,9 @@ jobs:
 
             - name: Unit-Tests
               run: vendor/bin/phpunit --testsuite unit
+
+            - name: Funktionstests (Doctrine-Mapping)
+              run: vendor/bin/phpunit --testsuite functional
 
     integration:
         name: Integrationstests (MySQL und PostgreSQL)

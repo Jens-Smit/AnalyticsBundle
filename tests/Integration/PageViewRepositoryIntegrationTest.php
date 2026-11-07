@@ -6,9 +6,7 @@ use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\DriverManager;
 use Doctrine\DBAL\Tools\DsnParser;
 use Doctrine\ORM\EntityManager;
-use Doctrine\ORM\Mapping\Driver\XmlDriver;
 use Doctrine\ORM\ORMSetup;
-use Doctrine\Persistence\Mapping\Driver\SymfonyFileLocator;
 use Jenssmit\AnalyticsBundle\Entity\PageView;
 use Jenssmit\AnalyticsBundle\Repository\PageViewRepository;
 use Jenssmit\AnalyticsBundle\Service\SchemaProvider;
@@ -38,11 +36,7 @@ final class PageViewRepositoryIntegrationTest extends TestCase
             return;
         }
 
-        $ormConfig = ORMSetup::createXMLMetadataConfiguration([], true);
-        $ormConfig->setMetadataDriverImpl(new XmlDriver(
-            new SymfonyFileLocator([__DIR__.'/../../config/doctrine' => 'Jenssmit\AnalyticsBundle\Entity'], '.orm.xml'),
-            '.orm.xml',
-        ));
+        $ormConfig = ORMSetup::createAttributeMetadataConfiguration([__DIR__.'/../../src'], true);
         $connectionParams = (new DsnParser([
             'mysql' => 'pdo_mysql',
             'postgresql' => 'pdo_pgsql',
@@ -85,8 +79,8 @@ final class PageViewRepositoryIntegrationTest extends TestCase
         self::assertSame(2, $this->repository->countViewsForSite('site-a', $since));
         self::assertSame(1, $this->repository->countViewsForSite('site-b', $since));
 
-        self::assertSame(2, $this->repository->countVisitorsForSite('site-a', $since));
-        self::assertSame(1, $this->repository->countVisitorsForSite('site-b', $since));
+        self::assertSame(2, $this->repository->countVisitsForSite('site-a', $since));
+        self::assertSame(1, $this->repository->countVisitsForSite('site-b', $since));
 
         $siteATopPaths = $this->repository->groupForSite('site-a', $since, 'path', 10, 'Unbekannt');
         self::assertCount(2, $siteATopPaths);

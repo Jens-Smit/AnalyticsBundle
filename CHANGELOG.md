@@ -6,6 +6,11 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokument
 
 ### Geändert
 
+- Besucherzählung fachlich korrigiert: Das IP-Pseudonym ist tagesbezogen, daher ist eine Unique-Visitor-Zahl über mehrere Tage nicht bestimmbar. `summary` meldet deshalb `visits` (Besuche/Besuchstage) statt `unique_visitors`; die Repository-Methode heißt entsprechend `countVisitsForSite`. Die Tagesreihe bleibt unverändert (je Tag eindeutige Pseudonyme).
+- Rate-Limiting ist atomar: Prüfung und Inkrement des Collect-Zählers laufen unter einem exklusiven Lock (`symfony/lock`, standardmäßig `FlockStore`), parallele Anfragen desselben IP-Präfixes können das Limit nicht überholen. Für verteilte Setups sind Cache und Lock-Store gemeinsam zu konfigurieren (siehe README).
+- Content-Type-Prüfung vervollständigt: Anfragen ohne Content-Type werden künftig abgelehnt (`415`); erlaubt bleiben `application/json` und `text/plain` mit Parametern (etwa `charset`) in beliebiger Schreibweise.
+- Doctrine-Mapping auf Attribute als alleinige Quelle konsolidiert: Die Spaltennamen im Attribut-Mapping entsprechen jetzt dem Schema (`site_key`, `operating_system` usw.), das redundante XML-Mapping unter `config/doctrine/` ist entfernt. `doctrine.orm.auto_mapping: true` genügt in fremden Projekten, weil DoctrineBundle das Mapping in `src/Entity/` findet.
+
 - Mandantentrennung durchgängig umgesetzt: Alle Statistik-, Zähl- und Löschabfragen verlangen zwingend einen Site-Key. Übergreifende Zugriffe existieren nur noch als ausdrücklich benannte `*All`-Methoden (`countBeforeAll`, `deleteBeforeAll`) für den dokumentierten Betriebsmodell mit `analytics:purge --all-sites`.
 - Statistikberechnung in SQL verlagert: `COUNT`, `COUNT(DISTINCT)` und Tages-Gruppierungen laufen jetzt in der Datenbank (plattformbewusst für MySQL/MariaDB, PostgreSQL und SQLite). Der `StatsService` lädt keine PageView-Objektmengen mehr in den Speicher.
 - Datenschutz und Datensparsamkeit als Standard: `record_user_identifier` ist standardmäßig deaktiviert, `retention_days` beträgt standardmäßig 90 Tage, Referrer werden auf den Hostnamen reduziert, Pfade ohne Query-Parameter und Fragmente gespeichert.
@@ -13,6 +18,12 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokument
 - Löschvorgänge laufen mandantenbezogen in Batches (1000 Datensätze pro Durchlauf); `analytics:purge` bleibt standardmäßig ein Dry-Run und protokolliert keine personenbezogenen Daten.
 
 ### Hinzugefügt
+
+- Symfony-Testanwendung (`tests/Fixtures/Kernel`) mit Funktionstests: Das Doctrine-Mapping wird über eine echte Anwendung mit DoctrineBundle und `auto_mapping` geprüft (Spaltennamen, Tabellenname, Persistenz gegen das generierte Schema).
+- CI-Job „Paketierung“: strikte Composer-Validierung und Installation des Bundles aus einem fremden Projekt über ein Path-Repository, inklusive Autoload-Prüfung von Bundle- und Entity-Klassen.
+- `.gitattributes` mit `export-ignore` für Test-, CI- und Entwicklungsdateien.
+- Zusätzliche Randfalltests: Rate-Limiter (Limit-Erschöpfung, unabhängige IP-Präfixe, Fensterwechsel, Limit 0), Content-Type-Varianten (Charset, Groß-/Kleinschreibung, fehlender/leerer Header), JSON-Payloads, die keine Objekte sind.
+- README: Abschnitte zum Request-Größenlimit auf Infrastrukturebene (nginx, Apache, Proxies) und zum Rate-Limiting in verteilten Setups.
 
 - Collect-Endpunkt abgesichert: Request-Größenlimit (`collect_max_request_size`, Standard 4096 Bytes), Content-Type-Prüfung, generische Fehlerantworten ohne interne Details, `Vary: Origin` und `Access-Control-Allow-Origin` nur für explizit erlaubte Origins.
 - Rate-Limiting für den Collect-Endpunkt (`collect_rate_limit`, Standard 360 Anfragen je anonymisiertem IP-Präfix und Stunde, 0 deaktiviert das Limit), inklusive `Retry-After`.

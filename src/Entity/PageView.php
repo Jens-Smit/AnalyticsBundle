@@ -13,32 +13,32 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'jenssmit_page_view')]
 #[ORM\Index(name: 'idx_jenssmit_page_view_created_at', columns: ['created_at'])]
 #[ORM\Index(name: 'idx_jenssmit_page_view_site_created', columns: ['site_key', 'created_at'])]
-final class PageView
+class PageView
 {
     public function __construct(
         #[ORM\Id]
         #[ORM\Column(type: 'integer')]
         #[ORM\GeneratedValue]
         private ?int $id = null,
-        #[ORM\Column(length: 32)]
+        #[ORM\Column(name: 'site_key', length: 32)]
         private readonly ?string $siteKey = null,
-        #[ORM\Column(length: 500)]
+        #[ORM\Column(name: 'path', length: 500)]
         private readonly ?string $path = null,
-        #[ORM\Column(type: 'datetime_immutable')]
+        #[ORM\Column(name: 'created_at', type: 'datetime_immutable')]
         private readonly ?\DateTimeImmutable $createdAt = null,
-        #[ORM\Column(length: 190, nullable: true)]
+        #[ORM\Column(name: 'route', length: 190, nullable: true)]
         private readonly ?string $route = null,
-        #[ORM\Column(length: 255, nullable: true)]
+        #[ORM\Column(name: 'referrer', length: 255, nullable: true)]
         private readonly ?string $referrer = null,
-        #[ORM\Column(length: 32, nullable: true)]
+        #[ORM\Column(name: 'browser', length: 32, nullable: true)]
         private readonly ?string $browser = null,
-        #[ORM\Column(length: 32, nullable: true)]
+        #[ORM\Column(name: 'operating_system', length: 32, nullable: true)]
         private readonly ?string $operatingSystem = null,
-        #[ORM\Column(length: 16, nullable: true)]
+        #[ORM\Column(name: 'device', length: 16, nullable: true)]
         private readonly ?string $device = null,
-        #[ORM\Column(length: 64, nullable: true)]
+        #[ORM\Column(name: 'ip_hash', length: 64, nullable: true)]
         private readonly ?string $ipHash = null,
-        #[ORM\Column(length: 191, nullable: true)]
+        #[ORM\Column(name: 'user_identifier', length: 191, nullable: true)]
         private readonly ?string $userIdentifier = null,
     ) {
     }

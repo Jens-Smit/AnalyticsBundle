@@ -46,7 +46,14 @@ class PageViewRepository
         )->fetchOne();
     }
 
-    public function countVisitorsForSite(string $siteKey, \DateTimeImmutable $since): int
+    /**
+     * Anzahl der Besuche: Da das IP-Pseudonym tagesbezogen ist, zählt
+     * jeder Kalendertag mit Pseudonym als ein Besuch (Besuchstag).
+     * Ein fachlich eindeutiger Besucher über mehrere Tage ist ohne
+     * dauerhaftes Pseudonym nicht bestimmbar. Aufrufe ohne Pseudonym
+     * (unbekannte IP) zählen nicht als Besuch.
+     */
+    public function countVisitsForSite(string $siteKey, \DateTimeImmutable $since): int
     {
         return (int) $this->connection()->executeQuery(
             'SELECT COUNT(DISTINCT ip_hash) FROM jenssmit_page_view WHERE site_key = :site AND created_at >= :since',
