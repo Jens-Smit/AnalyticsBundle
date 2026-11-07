@@ -63,7 +63,12 @@ jobs:
                   extensions: pdo_sqlite
 
             - name: Abhängigkeiten in niedrigsten Versionen installieren
-              run: composer update --prefer-lowest --prefer-stable --no-progress
+              run: |
+                  composer update --prefer-lowest --prefer-stable --no-progress
+                  # doctrine-bridge <6.4.8 unterstützt DBAL 4 nicht; der
+                  # Lowest-Test zielt auf die Symfony-Minorversion, nicht
+                  # auf historische Patchstände.
+                  composer update symfony/doctrine-bridge --prefer-dist --no-progress
 
             - name: Unit-Tests
               run: vendor/bin/phpunit --testsuite unit
