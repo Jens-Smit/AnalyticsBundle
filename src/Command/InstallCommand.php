@@ -10,13 +10,13 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
 
 /**
- * Legt die Analytics-Tabelle an. Die Anweisungen sind idempotent:
- * Bestehende Tabellen und Daten bleiben unangetastet, es wird nichts
- * gelöscht und keine Spalte verändert.
+ * Legt die Analytics-Tabellen an (PageViews und Events). Die
+ * Anweisungen sind idempotent: Bestehende Tabellen und Daten bleiben
+ * unangetastet, es wird nichts gelöscht und keine Spalte verändert.
  */
 #[AsCommand(
     name: 'analytics:install',
-    description: 'Legt die Analytics-Tabelle an (idempotent, ohne Datenverlust).',
+    description: 'Legt die Analytics-Tabellen an (idempotent, ohne Datenverlust).',
 )]
 final class InstallCommand extends Command
 {
@@ -35,7 +35,10 @@ final class InstallCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         try {
-            $statements = $this->schemaProvider->createTableStatements($this->connection);
+            $statements = [
+                ...$this->schemaProvider->createTableStatements($this->connection),
+                ...$this->schemaProvider->createEventTableStatements($this->connection),
+            ];
         } catch (\RuntimeException $exception) {
             $output->writeln(\sprintf('<error>%s</error>', $exception->getMessage()));
 
@@ -46,7 +49,7 @@ final class InstallCommand extends Command
             $this->connection->executeStatement($statement);
         }
 
-        $output->writeln('<info>Analytics-Tabelle wurde angelegt oder existierte bereits.</info>');
+        $output->writeln('<info>Analytics-Tabellen wurden angelegt oder existierten bereits.</info>');
 
         return Command::SUCCESS;
     }

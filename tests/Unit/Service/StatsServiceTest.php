@@ -2,26 +2,31 @@
 
 namespace Jenssmit\AnalyticsBundle\Tests\Unit\Service;
 
+use Jenssmit\AnalyticsBundle\Repository\AnalyticsEventRepository;
 use Jenssmit\AnalyticsBundle\Repository\PageViewRepository;
 use Jenssmit\AnalyticsBundle\Service\StatsService;
+use Jenssmit\AnalyticsBundle\Service\SystemClock;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Cache\Adapter\ArrayAdapter;
 
 final class StatsServiceTest extends TestCase
 {
     private PageViewRepository&MockObject $repository;
+    private AnalyticsEventRepository&MockObject $eventRepository;
 
     protected function setUp(): void
     {
         $this->repository = $this->createMock(PageViewRepository::class);
+        $this->eventRepository = $this->createMock(AnalyticsEventRepository::class);
     }
 
     private function createService(string $siteKey = 'site-a'): StatsService
     {
-        return new StatsService($this->repository, $siteKey);
+        return new StatsService($this->repository, $this->eventRepository, $siteKey, new SystemClock());
     }
 
-    public function testSummaryUsesOnlyTheConfiguredSite(): void
+    public function testSummaryUsesTheUnifiedResponseContract(): void
     {
         $this->repository
             ->expects(self::once())
@@ -37,14 +42,18 @@ final class StatsServiceTest extends TestCase
         $summary = $this->createService()->summary(30);
 
         self::assertSame('site-a', $summary['site']);
-        self::assertSame(10, $summary['views']);
-        self::assertSame(6, $summary['visits']);
-        self::assertSame(0.33, $summary['views_per_day']);
+        self::assertArrayHasKey('from', $summary['period']);
+        self::assertSame(30, $summary['period']['days']);
+        self::assertSame(10, $summary['data']['views']);
+        self::assertSame(6, $summary['data']['visits']);
+        self::assertSame(0.33, $summary['data']['views_per_day']);
+        self::assertSame('UTC', $summary['meta']['timezone']);
+        self::assertSame('summary', $summary['meta']['report']);
     }
 
     public function testTimeseriesFillsMissingDaysWithZeros(): void
     {
-        $today = new \DateTimeImmutable('today');
+        $today = (new SystemClock())->today();
 
         $this->repository
             ->method('timeseriesForSite')
@@ -55,18 +64,16 @@ final class StatsServiceTest extends TestCase
 
         $timeseries = $this->createService()->timeseries(7);
 
-        self::assertCount(7, $timeseries['series']);
+        self::assertCount(7, $timeseries['data']);
 
-        foreach ($timeseries['series'] as $index => $entry) {
+        foreach ($timeseries['data'] as $index => $entry) {
             $expectedDate = $today->modify(\sprintf('-%d days', 6 - $index))->format('Y-m-d');
 
             self::assertSame($expectedDate, $entry['date']);
         }
 
-        self::assertSame(10, $timeseries['series'][6]['views']);
-        self::assertSame(6, $timeseries['series'][6]['visitors']);
-        self::assertSame(0, $timeseries['series'][0]['views']);
-        self::assertSame(0, $timeseries['series'][0]['visitors']);
+        self::assertSame(0, $timeseries['data'][0]['views']);
+        self::assertSame(0, $timeseries['data'][0]['visitors']);
     }
 
     public function testTopPagesComputeShareFromSiteTotal(): void
@@ -83,9 +90,9 @@ final class StatsServiceTest extends TestCase
         $topPages = $this->createService()->topPages(10, 30);
 
         self::assertSame('site-a', $topPages['site']);
-        self::assertSame(10, $topPages['total']);
-        self::assertSame(80.0, $topPages['items'][0]['share']);
-        self::assertSame(20.0, $topPages['items'][1]['share']);
+        self::assertSame(10, $topPages['data']['total']);
+        self::assertSame(80.0, $topPages['data']['items'][0]['share']);
+        self::assertSame(20.0, $topPages['data']['items'][1]['share']);
     }
 
     public function testReferrersUseDirektLabelForNullReferrer(): void
@@ -98,7 +105,98 @@ final class StatsServiceTest extends TestCase
 
         $referrers = $this->createService()->referrers(10, 30);
 
-        self::assertSame('Direkt', $referrers['items'][0]['name']);
-        self::assertSame(100.0, $referrers['items'][0]['share']);
+        self::assertSame('Direkt', $referrers['data']['items'][0]['name']);
+        self::assertSame(100.0, $referrers['data']['items'][0]['share']);
+    }
+
+    public function testSourcesAreSiteScoped(): void
+    {
+        $this->repository->method('countViewsForSite')->willReturn(10);
+        $this->repository
+            ->method('sourcesForSite')
+            ->with('site-a', self::anything(), 10, 'unknown')
+            ->willReturn([
+                ['name' => 'search', 'views' => 8],
+                ['name' => 'direct', 'views' => 2],
+            ]);
+
+        $sources = $this->createService()->sources(10, 30);
+
+        self::assertSame('sources', $sources['meta']['report']);
+        self::assertSame('search', $sources['data']['items'][0]['name']);
+        self::assertSame(80.0, $sources['data']['items'][0]['share']);
+    }
+
+    public function testEventsAreSiteScoped(): void
+    {
+        $this->eventRepository->method('countForSite')->willReturn(4);
+        $this->eventRepository
+            ->method('namesForSite')
+            ->with('site-a', self::anything(), 10)
+            ->willReturn([
+                ['name' => 'newsletter_signup', 'category' => 'engagement', 'events' => 3],
+            ]);
+
+        $events = $this->createService()->events(10, 30);
+
+        self::assertSame('events', $events['meta']['report']);
+        self::assertSame(4, $events['data']['total']);
+        self::assertSame('newsletter_signup', $events['data']['items'][0]['name']);
+    }
+
+    public function testReportCacheServesRepeatedCallsFromCache(): void
+    {
+        $this->repository->expects(self::once())->method('countViewsForSite')->willReturn(10);
+        $this->repository->expects(self::once())->method('countVisitsForSite')->willReturn(6);
+
+        $service = new StatsService(
+            $this->repository,
+            $this->eventRepository,
+            'site-a',
+            new SystemClock(),
+            new ArrayAdapter(),
+            60,
+        );
+
+        $first = $service->summary(30);
+        $second = $service->summary(30);
+
+        self::assertSame($first, $second);
+    }
+
+    public function testCacheInvalidationDropsStaleEntries(): void
+    {
+        $this->repository->expects(self::exactly(2))->method('countViewsForSite')->willReturn(10);
+        $this->repository->expects(self::exactly(2))->method('countVisitsForSite')->willReturn(6);
+
+        $service = new StatsService(
+            $this->repository,
+            $this->eventRepository,
+            'site-a',
+            new SystemClock(),
+            new ArrayAdapter(),
+            60,
+        );
+
+        $service->summary(30);
+        $service->invalidateReportCache();
+        $service->summary(30);
+    }
+
+    public function testCacheKeysAreSiteScoped(): void
+    {
+        $this->repository->method('countViewsForSite')->willReturn(10);
+        $this->repository->method('countVisitsForSite')->willReturn(6);
+
+        $cache = new ArrayAdapter();
+
+        $serviceA = new StatsService($this->repository, $this->eventRepository, 'site-a', new SystemClock(), $cache, 60);
+        $serviceB = new StatsService($this->repository, $this->eventRepository, 'site-b', new SystemClock(), $cache, 60);
+
+        $summaryA = $serviceA->summary(30);
+        $summaryB = $serviceB->summary(30);
+
+        self::assertSame('site-a', $summaryA['site']);
+        self::assertSame('site-b', $summaryB['site']);
     }
 }

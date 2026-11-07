@@ -7,11 +7,19 @@ use Symfony\Component\EventDispatcher\EventSubscriberInterface;
 use Symfony\Component\HttpKernel\Event\TerminateEvent;
 use Symfony\Component\HttpKernel\KernelEvents;
 
+/**
+ * Serverseitige Erfassung über kernel.terminate.
+ *
+ * Der Subscriber ist nur im page_view_mode "server" aktiv. In den
+ * Modi "client" und "manual" übernehmen das JavaScript-SDK
+ * beziehungsweise explizite record()-Aufrufe, damit Kombinationen aus
+ * Server-Tracking und Client-Beacon nicht doppelt zählen.
+ */
 final class PageViewSubscriber implements EventSubscriberInterface
 {
     public function __construct(
         private readonly PageViewRecorder $recorder,
-        private readonly bool $serverSideTracking,
+        private readonly string $pageViewMode,
         private readonly bool $trackOnlySuccessful,
     ) {
     }
@@ -25,7 +33,7 @@ final class PageViewSubscriber implements EventSubscriberInterface
 
     public function onKernelTerminate(TerminateEvent $event): void
     {
-        if (!$this->serverSideTracking || !$event->isMainRequest()) {
+        if ('server' !== $this->pageViewMode || !$event->isMainRequest()) {
             return;
         }
 

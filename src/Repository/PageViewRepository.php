@@ -177,6 +177,35 @@ class PageViewRepository
         );
     }
 
+    /**
+     * Gruppierte Zählung der Traffic-Quellen, mandantenbezogen. Alte
+     * Datensätze ohne Quellenangabe erscheinen unter dem Null-Label.
+     *
+     * @return list<array{name: string, views: int}>
+     */
+    public function sourcesForSite(string $siteKey, \DateTimeImmutable $since, int $limit, string $nullLabel): array
+    {
+        $rows = $this->connection()->executeQuery(
+            'SELECT COALESCE(source, :null_label) AS name, COUNT(*) AS views '
+            .'FROM jenssmit_page_view WHERE site_key = :site AND created_at >= :since '
+            .'GROUP BY 1 ORDER BY views DESC, name ASC LIMIT :limit',
+            [
+                'site' => $siteKey,
+                'since' => $since,
+                'null_label' => $nullLabel,
+                'limit' => \max(1, $limit),
+            ],
+            ['since' => Types::DATETIME_IMMUTABLE, 'limit' => Types::INTEGER],
+        )->fetchAllAssociative();
+
+        $items = [];
+        foreach ($rows as $row) {
+            $items[] = ['name' => (string) $row['name'], 'views' => (int) $row['views']];
+        }
+
+        return $items;
+    }
+
     private function connection(): Connection
     {
         return $this->entityManager->getConnection();

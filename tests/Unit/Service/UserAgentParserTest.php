@@ -63,11 +63,11 @@ final class UserAgentParserTest extends TestCase
             'tablet',
         ];
 
-        yield 'Googlebot' => [
+        yield 'Googlebot wird als regulärer User-Agent klassifiziert, nicht als Bot' => [
             'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)',
-            'Bot',
-            null,
-            'bot',
+            'Sonstige',
+            'Sonstige',
+            'desktop',
         ];
 
         yield 'Leere Zeichenkette' => [

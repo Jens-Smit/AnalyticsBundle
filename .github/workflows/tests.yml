@@ -48,6 +48,29 @@ jobs:
                   php -r "require 'vendor/autoload.php'; exit(class_exists('Jenssmit\\AnalyticsBundle\\JenssmitAnalyticsBundle') ? 0 : 1);"
                   php -r "require 'vendor/autoload.php'; exit(class_exists('Jenssmit\\AnalyticsBundle\\Entity\\PageView') ? 0 : 1);"
 
+    compatibility:
+        name: Kompatibilität (Symfony 6.4, lowest)
+        runs-on: ubuntu-latest
+        steps:
+            - name: Repository auschecken
+              uses: actions/checkout@v4
+
+            - name: PHP einrichten
+              uses: shivammathur/setup-php@v2
+              with:
+                  php-version: '8.2'
+                  coverage: none
+                  extensions: pdo_sqlite
+
+            - name: Abhängigkeiten in niedrigsten Versionen installieren
+              run: composer update --prefer-lowest --prefer-stable --no-progress
+
+            - name: Unit-Tests
+              run: vendor/bin/phpunit --testsuite unit
+
+            - name: Funktionstests (Doctrine-Mapping)
+              run: vendor/bin/phpunit --testsuite functional
+
     quality:
         name: Qualität (PHP ${{ matrix.php-version }})
         runs-on: ubuntu-latest
