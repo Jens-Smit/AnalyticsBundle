@@ -1,6 +1,10 @@
 # AnalyticsBundle
 
-Cookiefreies, datensparsames Web-Analytics für Symfony. Das Bundle erfasst Seitenaufrufe serverseitig oder über einen abgesicherten Collect-Endpunkt, trennt mehrere Websites strikt nach Mandanten und aggregiert die Statistik direkt in der Datenbank.
+**Privacy-first, self-hosted web analytics for Symfony.**
+
+Datensparsame, selbst gehostete Webanalyse direkt in Symfony: serverseitige Erfassung, konsequente Site-Isolation und SQL-basierte Statistiken über eine API, die sich in bestehende Anwendungen integrieren lässt. Keine Cookies, keine rohen IP-Adressen, keine vollständigen User-Agents, keine externen Analytics-Dienste.
+
+Das Bundle erfasst Seitenaufrufe serverseitig oder über einen abgesicherten Collect-Endpunkt, trennt mehrere Websites strikt nach Mandanten und aggregiert die Statistik direkt in der Datenbank.
 
 Wichtig: Dieses Bundle erfasst bewusst weniger Daten als klassische Analysewerkzeuge. Es speichert keine Cookies, keine IP-Adressen, keine User-Agent-Zeichenketten und keine vollständigen Referrer-URLs. Datenschutzrechtliche Bewertungen hängen dennoch vom konkreten Einsatz, der Konfiguration und den Verantwortlichkeiten des Betreibers ab.
 
@@ -8,18 +12,23 @@ Wichtig: Dieses Bundle erfasst bewusst weniger Daten als klassische Analysewerkz
 
 - Mandantentrennung: Jede Installation wertet genau einen `site_key` aus; Abfragen sind zwingend mandantenbezogen.
 - Datensparsame Standardkonfiguration: keine Cookies, keine Login-Identifier, keine rohen IP-Adressen, keine User-Agent-Speicherung.
-- IP-Kürzung: IPv4 auf /24-Netzpräfix, IPv6 auf /64-Netzpräfix, zusätzlich tagesbezogenes Pseudonym mit geheimem Salt.
-- Erfassung wahlweise serverseitig über `kernel.terminate` oder über den Collect-Endpunkt (Beacon/fetch).
-- Abgesicherter Collect-Endpunkt: Origin-Allowlist, Request-Größenlimit, Content-Type-Prüfung, Rate-Limiting, strikte Pfad- und Referrer-Validierung.
+- IP-Kürzung: IPv4 auf /24-Netzpräfix, IPv6 auf /64-Netzpräfix, zusätzlich tagesbezogenes Pseudonym über HMAC-SHA256 mit geheimem Hash-Secret.
+- Erfassung wahlweise serverseitig über `kernel.terminate` oder über den Collect-Endpunkt (Beacon/fetch); `page_view_mode` verhindert Doppelzählung.
+- Bot-Ausschluss mit konfigurierbaren Mustern und Ausnahmen; DNT und Sec-GPC werden standardmäßig respektiert.
+- Traffic-Attribution: Quellen (`direct`, `search`, `social`, `internal`, `referral`, `campaign`) und normalisierte UTM-Parameter.
+- Custom Events über einen gleich geschützten Endpunkt, mit strenger Namensvalidierung.
+- Abgesicherter Collect-Endpunkt: Origin-Allowlist, Request-Größenlimit, Content-Type-Prüfung, atomares Rate-Limiting, strikte Pfad- und Referrer-Validierung.
 - SQL-Aggregation: Zählungen und Gruppierungen laufen in der Datenbank, nicht in PHP.
-- Auswertungs-API mit Zusammenfassung, Zeitreihe, Top-Seiten, Referrern, Browsern und Geräten.
-- Aufbewahrungsfrist mit Dry-Run-Purge und Batch-Löschung.
+- Einheitlicher API-Vertrag (`site`, `period`, `data`, `meta`), optionaler Report-Cache, CSV-/JSON-Export.
+- Aufbewahrungsfrist mit Dry-Run-Purge und Batch-Löschung, für PageViews und Events.
+- Schlankes JavaScript-SDK ohne Cookies, ohne LocalStorage, mit sendBeacon und fetch-Fallback.
+- Optionaler Messenger-Betrieb über `symfony/messenger`; synchroner Modus bleibt Standard.
 - Unterstützte Datenbanken: MySQL 8, MariaDB, PostgreSQL und SQLite.
 
 ## Anforderungen
 
 - PHP 8.2 oder höher
-- Symfony 7.x
+- Symfony 6.4, 7.x oder 8.x
 - Doctrine ORM 3 mit DoctrineBundle
 - SecurityBundle (für die rollenbasierte Statistik-API)
 
@@ -54,9 +63,11 @@ jenssmit_analytics:
     # Authentifizierungsgeheimnis.
     site_key: '%env(ANALYTICS_SITE_KEY)%'
 
-    # Geheimer Salt für das tagesbezogene IP-Pseudonym.
-    # Aus Umgebungsvariable laden, niemals committen.
-    salt: '%env(ANALYTICS_SALT)%'
+    # Geheimes Hash-Secret (HMAC-SHA256, mindestens 16 Zeichen) für das
+    # tagesbezogene IP-Pseudonym. Aus Umgebungsvariable laden, niemals
+    # committen und niemals loggen. Der alte Name "salt" ist ein
+    # veralteter Alias.
+    hash_secret: '%env(ANALYTICS_HASH_SECRET)%'
 
     # Aufbewahrungsfrist in Tagen (Standard: 90).
     retention_days: 90
@@ -65,8 +76,12 @@ jenssmit_analytics:
     # kann personenbezogen sein (z. B. E-Mail-Adresse).
     record_user_identifier: false
 
-    # Serverseitige Erfassung über kernel.terminate.
-    server_side_tracking: true
+    # Erfassungsmodus: server (Standard, kernel.terminate), client
+    # (JavaScript-SDK/Beacon) oder manual (explizite record()-Aufrufe).
+    # Verhindert Doppelzählung, wenn Server-Tracking und Beacon
+    # kombiniert werden. Der alte Name "server_side_tracking: false"
+    # entspricht page_view_mode 'manual'.
+    page_view_mode: 'server'
 
     # Nur erfolgreiche Anfragen (2xx/3xx) erfassen.
     track_only_successful: true
@@ -91,13 +106,40 @@ jenssmit_analytics:
 
     # Routenpräfix aller Bundle-Routen.
     route_prefix: '/analytics'
+
+    # Bots und Crawler nicht erfassen (Standard: true).
+    exclude_bots: true
+
+    # DNT: 1 und Sec-GPC: 1 respektieren (Standard: true).
+    respect_dnt: true
+    respect_gpc: true
+
+    # Zusätzliche Bot-Muster (Regex ohne Delimiter) und Ausnahmen für
+    # False Positives. Ausnahmen werden zuerst geprüft.
+    bot_patterns: []
+    bot_exceptions: []
+
+    # Optional: erlaubte utm_source-Werte. Leer bedeutet keine
+    # Allowlist-Prüfung; Werte werden immer normalisiert und gekürzt.
+    campaign_allowlist: []
+
+    # Event-Werte speichern? Standard: false. Aktiviert bedeutet:
+    # normalisierte, gekürzte Werte (max. 100 Zeichen).
+    record_event_values: false
+
+    # Optionaler PSR-6-Report-Cache in Sekunden. 0 deaktiviert den
+    # Cache (Standard). Nach einem Purge wird die Generation erhöht.
+    report_cache_ttl: 0
+
+    # Maximaler Report-Zeitraum in Tagen (Standard: 366).
+    max_report_days: 366
 ```
 
 Die zugehörigen Umgebungsvariablen:
 
 ```bash
 ANALYTICS_SITE_KEY=restaurant_001
-ANALYTICS_SALT=langes-zufaelliges-geheimnis
+ANALYTICS_HASH_SECRET=langes-zufaelliges-geheimnis-mindestens-16-zeichen
 ```
 
 ## Datenbank
@@ -116,7 +158,7 @@ Wer Doctrine-Migrations nutzt, kann die Tabelle alternativ über `doctrine:migra
 
 ### Variante 1: Serverseitig (Standard)
 
-Bei aktiviertem `server_side_tracking` erfasst das Bundle Hauptanfragen automatisch nach dem Senden der Antwort (`kernel.terminate`). Die Antwortzeit des Besuchers wird dadurch nicht beeinflusst. Erfasst werden nur sichere HTTP-Methoden und, sofern konfiguriert, nur erfolgreiche Statuscodes.
+Im Standard-`page_view_mode: 'server'` erfasst das Bundle Hauptanfragen automatisch nach dem Senden der Antwort (`kernel.terminate`). Die Antwortzeit des Besuchers wird dadurch nicht beeinflusst. Erfasst werden nur sichere HTTP-Methoden und, sofern konfiguriert, nur erfolgreiche Statuscodes.
 
 ### Variante 2: Collect-Endpunkt
 
@@ -178,18 +220,82 @@ Alle Endpunkte erfordern die konfigurierte Rolle (`stats_role`, Standard `ROLE_A
 | `GET /analytics/stats/referrers` | `limit`, `days` | Referrer-Hosts, `Direkt` ohne Referrer |
 | `GET /analytics/stats/browsers` | `limit`, `days` | Browser-Klassifikation |
 | `GET /analytics/stats/devices` | `limit`, `days` | Gerät-Klassifikation |
+| `GET /analytics/stats/sources` | `limit`, `days` | Traffic-Quellen (direct, search, social, internal, referral, campaign) |
+| `GET /analytics/stats/events` | `limit`, `days` | Häufigste Custom Events |
+| `GET /analytics/stats/export` | `report`, `format`, `days`, `limit` | CSV- oder JSON-Export aggregierter Reports |
 
-Beispielantwort für `summary`:
+Alle Antworten folgen dem einheitlichen Vertrag aus `site`, `period`, `data` und `meta`. `meta.timezone` ist immer `UTC`; `days` wird auf `max_report_days` begrenzt. Beispielantwort für `summary`:
 
 ```json
 {
     "site": "restaurant_001",
     "period": { "from": "2026-10-09", "days": 30 },
-    "views": 1234,
-    "visits": 421,
-    "views_per_day": 41.13
+    "data": {
+        "views": 1234,
+        "visits": 421,
+        "views_per_day": 41.13
+    },
+    "meta": {
+        "report": "summary",
+        "timezone": "UTC",
+        "visits_definition": "Besuchstage: Da das IP-Pseudonym tagesbezogen ist, zählt jeder Kalendertag mit Pseudonym als ein Besuch."
+    }
 }
 ```
+
+Der Export liefert ausschließlich aggregierte Daten, mandantenbezogen und mit denselben Rechten wie die Statistik-Endpunkte; CSV wird als Stream ausgeliefert:
+
+```
+GET /analytics/stats/export?report=top-pages&format=csv&days=30&limit=100
+```
+
+### Report-Cache (optional)
+
+Mit `report_cache_ttl > 0` werden aggregierte Ergebnisse pro Site, Report und Parameter im PSR-6-Cache (`cache.app`) vorgehalten. Der Cache-Schlüssel enthält eine Generationsnummer, die `analytics:purge --force` erhöht; veraltete Einträge laufen zusätzlich über ihre TTL ab. Betrieb ohne Cache bleibt die Standardeinstellung.
+
+## Custom Events
+
+Events werden über einen Endpunkt mit denselben Schutzschichten wie der Seitenaufruf-Collect erfasst:
+
+```javascript
+JenssmitAnalytics.trackEvent('newsletter_signup', 'summer-campaign', 'engagement');
+```
+
+```
+POST /analytics/collect/event
+Content-Type: application/json
+
+{"name":"newsletter_signup","category":"engagement"}
+```
+
+Regeln: Namen und Kategorien sind streng validiert (`[a-zA-Z0-9_.-]`, max. 80 beziehungsweise 64 Zeichen), Werte werden nur bei aktiviertem `record_event_values` normalisiert gespeichert, es gibt keine freie JSON-Payload und keine User-Properties. Bots und DNT-/GPC-Opt-outs werden nicht erfasst. Die Tabelle `jenssmit_analytics_event` wird von `analytics:install` angelegt und von `analytics:purge` mit derselben Aufbewahrungsfrist bereinigt.
+
+## JavaScript-SDK
+
+`assets/analytics.js` ist ein schlankes, abhängigkeitsfreies SDK: `trackPageView()`, `trackEvent(name, value?, category?)` und `setPage(path)` für SPA-Navigation. Bevorzugt `navigator.sendBeacon()`, mit `fetch(keepalive)` als Fallback. Keine Cookies, kein LocalStorage, keine Session-ID, keine automatischen Click-Listener. DNT und Sec-GPC werden respektiert: Bei einem Opt-out-Signal sendet das SDK nichts.
+
+```html
+<script src="/assets/analytics.js"></script>
+<script>
+    JenssmitAnalytics.trackPageView();
+</script>
+```
+
+Bei `page_view_mode: 'client'` sendet das SDK die Seitenaufrufe (mit `autoPageView: true` auch automatisch), während die serverseitige Erfassung deaktiviert ist; so wird Doppelzählung verhindert.
+
+## Asynchrone Erfassung (optional)
+
+Mit `symfony/messenger` kann die Speicherung asynchron erfolgen. Die Nachricht `RecordPageViewMessage` enthält ausschließlich normalisierte Daten (keine rohen IPs, keine User-Agents). Der Handler wird nur registriert, wenn Messenger installiert ist; das synchrone Recording bleibt Standard und liefert dieselbe Semantik. Bei Retries kann dieselbe Nachricht zweimal gespeichert werden (at-least-once); Duplikate beeinflussen nur Zählermetriken minimal.
+
+## Support-Matrix
+
+| PHP | Symfony |
+| --- | --- |
+| 8.2 | 6.4 LTS |
+| 8.2 / 8.3 | 7.x |
+| 8.4 | 8.x |
+
+Die CI prüft PHP 8.2–8.4 gegen die höchsten Versionen und zusätzlich die niedrigsten kompatiblen Versionen (Symfony 6.4) im Kompatibilitäts-Job.
 
 ## Aufbewahrung und Löschung
 
@@ -218,13 +324,13 @@ Was gespeichert wird und was nicht:
 | Cookies | Werden nicht gesetzt. |
 | IP-Adresse (roh) | Wird nicht gespeichert. |
 | IP-Adresse (gekürzt) | IPv4 auf /24, IPv6 auf /64 gekürzt und nur zur Pseudonymisierung verwendet. |
-| IP-Pseudonym | SHA-256 aus gekürztem Präfix, Kalendertag und Salt. Gültig für höchstens einen Tag. |
+| IP-Pseudonym | HMAC-SHA256 aus gekürztem Präfix und Kalendertag (UTC), verschlüsselt mit dem geheimen Hash-Secret. Gültig für höchstens einen Tag. |
 | User-Agent | Wird nur zur Klassifikation (Browser, System, Gerät) gelesen und nicht gespeichert. |
 | Referrer | Nur der Hostname, ohne Query-Parameter und Fragmente. |
 | Pfad | Ohne Query-Parameter und Fragmente (schützt vor Tokens in URLs). |
 | Login-Identifier | Standardmäßig deaktiviert. |
 
-Einordnung des IP-Hashes: Der Hash ist ein Pseudonym, keine anonyme Kennung. Er ist auf genau einen Kalendertag begrenzt und ermöglicht Näherungen für wiederkehrende Besucher innerhalb dieses Tages. Über mehrere Tage kann das Bundle deshalb keine eindeutigen Besucher, sondern nur Besuche (Besuchstage) zählen: Jeder Kalendertag mit einem Pseudonym zählt als ein Besuch. Ein dauerhaftes, geräteübergreifendes Unique-Visitor-Merkmal würde ein dauerhaftes Pseudonym erfordern und ist datenschutzrechtlich bewusst nicht umgesetzt. Mit Kenntnis des Salts und des Präfixes ließe er sich für begrenzte Zeiträume rechnen. Betreiber, die stärkere Anonymisierung benötigen, können die Besucherzählung nicht verwenden und sollten nur Aufrufzahlen auswerten.
+Einordnung des IP-Hashes: Der Hash ist ein Pseudonym, keine anonyme Kennung. Er ist auf genau einen Kalendertag begrenzt und ermöglicht Näherungen für wiederkehrende Besucher innerhalb dieses Tages. Über mehrere Tage kann das Bundle deshalb keine eindeutigen Besucher, sondern nur Besuche (Besuchstage) zählen: Jeder Kalendertag mit einem Pseudonym zählt als ein Besuch. Ein dauerhaftes, geräteübergreifendes Unique-Visitor-Merkmal würde ein dauerhaftes Pseudonym erfordern und ist datenschutzrechtlich bewusst nicht umgesetzt. Mit Kenntnis des Hash-Secrets und des Präfixes ließe er sich für begrenzte Zeiträume rechnen. Betreiber, die stärkere Anonymisierung benötigen, können die Besucherzählung nicht verwenden und sollten nur Aufrufzahlen auswerten.
 
 Wird `record_user_identifier` aktiviert, können personenbezogene Daten (z. B. E-Mail-Adressen) in die Datenbank gelangen. Diese Funktion erfordert eine datenschutzrechtliche Prüfung durch den Betreiber; als bloßer Bezeichner ist ein Login-Identifier keine harmlose Kennung.
 
@@ -246,6 +352,10 @@ Von Versionen vor 1.0.0 (Entwicklungsstand):
 1. Die Spalte `user_agent` wurde entfernt, der Referrer wird auf den Hostnamen reduziert, `record_user_identifier` ist standardmäßig deaktiviert und `retention_days` beträgt standardmäßig 90 Tage.
 2. Da vor 1.0.0 kein stabiles Schema existierte, ist die einfachste Migration: Tabelle löschen und neu anlegen (`DROP TABLE jenssmit_page_view;` danach `php bin/console analytics:install`). Bestehende v1.0.0-Tabellen werden von Updates nicht angetastet.
 3. Die Konfigurationsschlüssel `collect_rate_limit` und `collect_max_request_size` sind neu und müssen nicht gesetzt werden.
+4. Das IP-Pseudonym verwendet jetzt HMAC-SHA256 mit `hash_secret` statt angehängtem Salt (`salt` ist ein veralteter Alias). Bestehende Hashes bleiben historische Pseudonyme und können nicht neu berechnet werden; am Umstellungstag können Besuchstage-Metriken dadurch einmalig verzerrt sein.
+5. Neue Spalten `source`, `utm_source`, `utm_medium` und `utm_campaign` sowie die Tabelle `jenssmit_analytics_event` kommen hinzu. `analytics:install` verändert bestehende Tabellen nicht; für Bestandstabellen sind die Spalten per eigener Migration nachzuziehen, alte Datensätze erscheinen in Source-Reports als `unknown`.
+6. Zeitstempel und Tagesgrenzen sind jetzt durchgehend UTC; bei Server-Zeitzonen außerhalb von UTC verschieben sich Tagesgrenzen in Reports entsprechend.
+7. Die Statistik-API folgt dem einheitlichen Vertrag aus `site`, `period`, `data` und `meta`; die bisherigen flachen Antwortstrukturen (`views`, `visits` auf oberster Ebene, `total`/`items` auf oberster Ebene) entfallen. `unique_visitors` wurde bereits früher durch `visits` ersetzt.
 
 ## Entwicklung
 

@@ -4,10 +4,12 @@ namespace Jenssmit\AnalyticsBundle\Tests\Unit\Controller;
 
 use Jenssmit\AnalyticsBundle\Controller\CollectController;
 use Jenssmit\AnalyticsBundle\Service\CollectRateLimiter;
+use Jenssmit\AnalyticsBundle\Service\CollectRequestGuard;
 use Jenssmit\AnalyticsBundle\Service\IpAnonymizer;
 use Jenssmit\AnalyticsBundle\Service\PageViewRecorder;
 use Jenssmit\AnalyticsBundle\Service\PathNormalizer;
 use Jenssmit\AnalyticsBundle\Service\ReferrerNormalizer;
+use Jenssmit\AnalyticsBundle\Service\SystemClock;
 use PHPUnit\Framework\MockObject\MockObject;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -27,15 +29,23 @@ final class CollectControllerTest extends TestCase
      */
     private function createController(array $allowedOrigins = [], int $maxRequestSize = 4096, bool $rateLimitAllowed = true): CollectController
     {
+        return new CollectController(
+            $this->recorder,
+            $this->createGuard($allowedOrigins, $maxRequestSize, $rateLimitAllowed),
+            new PathNormalizer(),
+            new ReferrerNormalizer(),
+        );
+    }
+
+    private function createGuard(array $allowedOrigins, int $maxRequestSize, bool $rateLimitAllowed): CollectRequestGuard
+    {
         $rateLimiter = $this->createMock(CollectRateLimiter::class);
         $rateLimiter->method('allow')->willReturn($rateLimitAllowed);
 
-        return new CollectController(
-            $this->recorder,
+        return new CollectRequestGuard(
             $rateLimiter,
             new IpAnonymizer(),
-            new PathNormalizer(),
-            new ReferrerNormalizer(),
+            new SystemClock(),
             $allowedOrigins,
             $maxRequestSize,
         );

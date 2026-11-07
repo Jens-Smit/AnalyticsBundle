@@ -213,6 +213,25 @@ final class PageViewRepositoryIntegrationTest extends TestCase
         self::assertSame(0, $this->repository->countBeforeAll(new \DateTimeImmutable('-5 days')));
     }
 
+    public function testSourcesAreSiteScoped(): void
+    {
+        $this->track('site-a', '/blog', 1, 'hash-a', null, 'www.google.de', 'search');
+        $this->track('site-a', '/kontakt', 1, 'hash-b', null, null, 'direct');
+        $this->track('site-b', '/blog', 1, 'hash-c', null, 'www.google.de', 'search');
+
+        $since = new \DateTimeImmutable('today -1 day');
+
+        $siteA = $this->repository->sourcesForSite('site-a', $since, 10, 'unknown');
+        $siteB = $this->repository->sourcesForSite('site-b', $since, 10, 'unknown');
+
+        // Bei gleicher Anzahl entscheidet der Name aufsteigend.
+        self::assertSame('direct', $siteA[0]['name']);
+        self::assertSame('search', $siteA[1]['name']);
+        self::assertSame(1, $siteA[0]['views']);
+        self::assertCount(2, $siteA);
+        self::assertCount(1, $siteB);
+    }
+
     private function track(
         string $siteKey,
         string $path,
@@ -220,6 +239,7 @@ final class PageViewRepositoryIntegrationTest extends TestCase
         string $ipHash,
         ?\DateTimeImmutable $at = null,
         ?string $referrer = null,
+        ?string $source = null,
     ): void {
         self::$entityManager->persist(PageView::create(
             $siteKey,
@@ -232,6 +252,7 @@ final class PageViewRepositoryIntegrationTest extends TestCase
             null,
             $ipHash,
             null,
+            $source,
         ));
         self::$entityManager->flush();
     }

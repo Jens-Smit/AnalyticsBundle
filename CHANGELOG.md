@@ -6,6 +6,29 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokument
 
 ### Geändert
 
+- Tagespseudonym auf HMAC-SHA256 umgestellt: `hash_secret` wird als kryptografischer Schlüssel verwendet, nicht an die Eingabe angehängt. `salt` bleibt als veralteter Alias akzeptiert. Bestehende Hashes bleiben historische Pseudonyme; am Umstellungstag können Besuchstage-Metriken einmalig verzerrt sein.
+- UTC als durchgehende interne Zeitstrategie: Zeitstempel, Tagesgrenzen des Hash-Tag und Report-Zeiträume laufen über eine zentrale `SystemClock` in UTC, unabhängig von der Server-Zeitzone.
+- Konfiguration wird beim Container-Kompilieren validiert: `site_key` auf max. 32 Zeichen und `[a-zA-Z0-9_-]` begrenzt, `hash_secret` muss nicht leer und mindestens 16 Zeichen lang sein.
+- Bot-Erkennung von der Browser-Klassifikation getrennt: `BotDetector` entscheidet mit konfigurierbaren Mustern (`bot_patterns`) und Ausnahmen (`bot_exceptions`); `exclude_bots` schließt Bots standardmäßig von der Erfassung aus.
+- DNT (`DNT: 1`) und `Sec-GPC: 1` werden standardmäßig respektiert (`respect_dnt`, `respect_gpc`), für Server-Tracking und Collect identisch.
+- Pfadausschlüsse gelten auf Segmentgrenzen: `/admin` schließt `/admin` und `/admin/...` aus, nicht mehr `/administrator`.
+- `page_view_mode` (`server`, `client`, `manual`) ersetzt `server_side_tracking` (veralteter Alias) und verhindert Doppelzählung bei Kombination von Server-Tracking und Client-Beacon.
+- Bot-Regeln gegen False Positives abgesichert: Ausnahmen zuerst geprüft, Tests mit Chrome, Firefox, Safari, Samsung Browser und Headless-Chrome.
+- Statistik-API folgt dem einheitlichen Vertrag aus `site`, `period`, `data` und `meta` mit `meta.timezone: UTC`; `days` wird über `max_report_days` begrenzt.
+- `analytics:purge` bereinigt PageViews und Events gemeinsam und erhöht nach `--force` die Report-Cache-Generation.
+
+### Hinzugefügt
+
+- Traffic-Attribution: `TrafficSourceClassifier` (direct, search, social, internal, referral, campaign), `sourcesForSite()` als SQL-Repository-Methode, `GET /analytics/stats/sources`; Kampagnen-Parameter `utm_source`/`utm_medium`/`utm_campaign` werden normalisiert, gekürzt und optional per `campaign_allowlist` validiert (`utm_term`/`utm_content` werden nicht gespeichert). Neue Spalten `source`, `utm_source`, `utm_medium`, `utm_campaign`.
+- Custom Events: Entity `AnalyticsEvent` (Tabelle `jenssmit_analytics_event`), `AnalyticsEventRecorder`, `EventNameValidator`, `EventValueNormalizer` (Werte nur mit `record_event_values`), Endpunkt `POST /analytics/collect/event` mit denselben Schutzschichten, `GET /analytics/stats/events`, Retention über `analytics:purge`.
+- Gemeinsamer `CollectRequestGuard` für alle Collect-Endpunkte (Origin, Request-Größe, Content-Type, atomares Rate-Limiting).
+- CSV-/JSON-Export aggregierter Reports über `GET /analytics/stats/export` mit Streaming-CSV, mandantenbezogen und rollengeschützt.
+- Optionaler Report-Cache (PSR-6, `report_cache_ttl`) mit Site-, Report- und Parameter-spezifischen Schlüsseln und Generations-Invalidierung nach Purge.
+- JavaScript-SDK `assets/analytics.js`: `trackPageView()`, `trackEvent()`, `setPage()`, sendBeacon mit fetch-Fallback, keine Cookies/LocalStorage, DNT/GPC-Respekt.
+- Optionaler Messenger-Betrieb: `RecordPageViewMessage` und Handler, nur registriert bei installiertem `symfony/messenger` (Composer-Suggest); synchroner Modus bleibt Standard.
+- Symfony-Kompatibilität auf 6.4 LTS, 7.x und 8.x erweitert (`^6.4 || ^7.0 || ^8.0`), inklusive CI-Kompatibilitätsjob mit niedrigsten Versionen (Symfony 6.4, PHP 8.2).
+- Unit-Tests für BotDetector, TrafficSourceClassifier, CampaignParameterNormalizer, EventNameValidator/EventValueNormalizer, AnalyticsEventRecorder, CollectEventController, Report-Cache und Konfigurationsvalidierung; Integrationstest für Site-scoped Source-Gruppierung.
+
 - Besucherzählung fachlich korrigiert: Das IP-Pseudonym ist tagesbezogen, daher ist eine Unique-Visitor-Zahl über mehrere Tage nicht bestimmbar. `summary` meldet deshalb `visits` (Besuche/Besuchstage) statt `unique_visitors`; die Repository-Methode heißt entsprechend `countVisitsForSite`. Die Tagesreihe bleibt unverändert (je Tag eindeutige Pseudonyme).
 - Rate-Limiting ist atomar: Prüfung und Inkrement des Collect-Zählers laufen unter einem exklusiven Lock (`symfony/lock`, standardmäßig `FlockStore`), parallele Anfragen desselben IP-Präfixes können das Limit nicht überholen. Für verteilte Setups sind Cache und Lock-Store gemeinsam zu konfigurieren (siehe README).
 - Content-Type-Prüfung vervollständigt: Anfragen ohne Content-Type werden künftig abgelehnt (`415`); erlaubt bleiben `application/json` und `text/plain` mit Parametern (etwa `charset`) in beliebiger Schreibweise.
@@ -17,8 +40,6 @@ Alle nennenswerten Änderungen an diesem Projekt werden in dieser Datei dokument
 - Datenschutz und Datensparsamkeit als Standard: `record_user_identifier` ist standardmäßig deaktiviert, `retention_days` beträgt standardmäßig 90 Tage, Referrer werden auf den Hostnamen reduziert, Pfade ohne Query-Parameter und Fragmente gespeichert.
 - IP-Anonymisierung korrigiert: IPv4 wird auf das /24-Präfix gekürzt, IPv6 auf das /64-Präfix (zuvor wurde IPv6 nur unvollständig gekürzt). Der tagesbezogene Hash ist in Code und Dokumentation als Pseudonymisierung eingestuft, nicht als Anonymisierung.
 - Löschvorgänge laufen mandantenbezogen in Batches (1000 Datensätze pro Durchlauf); `analytics:purge` bleibt standardmäßig ein Dry-Run und protokolliert keine personenbezogenen Daten.
-
-### Hinzugefügt
 
 - Symfony-Testanwendung (`tests/Fixtures/Kernel`) mit Funktionstests: Das Doctrine-Mapping wird über eine echte Anwendung mit DoctrineBundle und `auto_mapping` geprüft (Spaltennamen, Tabellenname, Persistenz gegen das generierte Schema).
 - CI-Job „Paketierung“: strikte Composer-Validierung und Installation des Bundles aus einem fremden Projekt über ein Path-Repository, inklusive Autoload-Prüfung von Bundle- und Entity-Klassen.

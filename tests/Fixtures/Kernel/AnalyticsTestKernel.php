@@ -55,7 +55,6 @@ final class AnalyticsTestKernel extends Kernel
             ],
             'orm' => [
                 'auto_mapping' => true,
-                'enable_native_lazy_objects' => \PHP_VERSION_ID >= 80400,
             ],
         ]);
 
@@ -67,7 +66,7 @@ final class AnalyticsTestKernel extends Kernel
 
         $container->loadFromExtension('jenssmit_analytics', [
             'site_key' => 'test_site',
-            'salt' => 'test_salt',
+            'hash_secret' => 'functional-test-hash-secret',
         ]);
     }
 }

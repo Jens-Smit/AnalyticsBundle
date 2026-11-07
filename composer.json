@@ -12,20 +12,23 @@
     "require": {
         "php": ">=8.2",
         "doctrine/dbal": "^4.0",
-        "doctrine/doctrine-bundle": "^2.13",
+        "doctrine/doctrine-bundle": "^2.13 || ^3.0",
         "doctrine/orm": "^3.0",
         "psr/cache": "^3.0",
-        "symfony/console": "^7.0",
-        "symfony/framework-bundle": "^7.0",
-        "symfony/lock": "^7.0",
-        "symfony/security-bundle": "^7.0"
+        "symfony/console": "^6.4 || ^7.0 || ^8.0",
+        "symfony/framework-bundle": "^6.4 || ^7.0 || ^8.0",
+        "symfony/lock": "^6.4 || ^7.0 || ^8.0",
+        "symfony/security-bundle": "^6.4 || ^7.0 || ^8.0"
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.28",
         "phpstan/phpstan": "^2.0",
         "phpunit/phpunit": "^10.5",
-        "symfony/phpunit-bridge": "^7.0",
-        "symfony/var-exporter": "^7.0"
+        "symfony/phpunit-bridge": "^6.4 || ^7.0 || ^8.0",
+        "symfony/var-exporter": "^6.4 || ^7.0 || ^8.0"
+    },
+    "suggest": {
+        "symfony/messenger": "Für asynchrones Recording (RecordPageViewMessage); synchroner Modus bleibt Standard."
     },
     "autoload": {
         "psr-4": {
@@ -48,7 +51,7 @@
     },
     "extra": {
         "symfony": {
-            "require": "^7.0",
+            "require": "^6.4 || ^7.0 || ^8.0",
             "allow-contrib": false
         }
     }

@@ -2,6 +2,12 @@
 
 namespace Jenssmit\AnalyticsBundle\Service;
 
+/**
+ * Klassifiziert User-Agents für Browser-, System- und Geräte-Statistiken.
+ * Die Bot-Erkennung ist bewusst nicht Teil der Klassifikation: Sie liegt
+ * in der eigenen BotDetector-Klasse, damit der Bot-Ausschluss ein
+ * getrennter, konfigurierbarer Schritt ist.
+ */
 final class UserAgentParser
 {
     /**
@@ -11,10 +17,6 @@ final class UserAgentParser
     {
         if (null === $userAgent || '' === trim($userAgent)) {
             return ['browser' => null, 'operating_system' => null, 'device' => null];
-        }
-
-        if (preg_match('/bot|crawl|spider|slurp|curl|wget|monitoring|uptime|headless/i', $userAgent)) {
-            return ['browser' => 'Bot', 'operating_system' => null, 'device' => 'bot'];
         }
 
         $device = 'desktop';

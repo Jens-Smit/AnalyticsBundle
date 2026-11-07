@@ -50,14 +50,17 @@ final class IpAnonymizer
 
     /**
      * Bildet das tagesbezogene Pseudonym aus dem gekürzten Präfix, dem
-     * Kalendertag und dem geheimen Salt.
+     * Kalendertag (UTC) und dem geheimen Hash-Secret. Das Secret wird als
+     * kryptografischer Schlüssel über HMAC-SHA256 verwendet und nicht an
+     * die Eingabe angehängt.
      *
      * Wichtige Einordnung: Ein solcher Hash ist pseudonym, nicht anonym.
      * Er ermöglicht Näherungen für wiederkehrende Besucher innerhalb
-     * eines Tages, ist aber kein personenbezogenes Profil.
+     * eines Tages, ist aber kein personenbezogenes Profil. Das Secret
+     * wird niemals geloggt.
      */
-    public function hash(string $anonymizedIp, \DateTimeImmutable $day, string $salt): string
+    public function hash(string $anonymizedIp, \DateTimeImmutable $day, string $secret): string
     {
-        return hash('sha256', $anonymizedIp.'|'.$day->format('Y-m-d').'|'.$salt);
+        return hash_hmac('sha256', $anonymizedIp.'|'.$day->format('Y-m-d'), $secret);
     }
 }

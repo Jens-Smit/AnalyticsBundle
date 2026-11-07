@@ -40,6 +40,14 @@ class PageView
         private readonly ?string $ipHash = null,
         #[ORM\Column(name: 'user_identifier', length: 191, nullable: true)]
         private readonly ?string $userIdentifier = null,
+        #[ORM\Column(name: 'source', length: 16, nullable: true)]
+        private readonly ?string $source = null,
+        #[ORM\Column(name: 'utm_source', length: 100, nullable: true)]
+        private readonly ?string $utmSource = null,
+        #[ORM\Column(name: 'utm_medium', length: 50, nullable: true)]
+        private readonly ?string $utmMedium = null,
+        #[ORM\Column(name: 'utm_campaign', length: 100, nullable: true)]
+        private readonly ?string $utmCampaign = null,
     ) {
     }
 
@@ -54,6 +62,10 @@ class PageView
         ?string $device,
         ?string $ipHash,
         ?string $userIdentifier,
+        ?string $source = null,
+        ?string $utmSource = null,
+        ?string $utmMedium = null,
+        ?string $utmCampaign = null,
     ): self {
         return new self(
             null,
@@ -67,6 +79,10 @@ class PageView
             $device,
             $ipHash,
             $userIdentifier,
+            $source,
+            $utmSource,
+            $utmMedium,
+            $utmCampaign,
         );
     }
 
@@ -130,5 +146,29 @@ class PageView
     public function getUserIdentifier(): ?string
     {
         return $this->userIdentifier;
+    }
+
+    /**
+     * Traffic-Quelle: direct, search, social, internal, referral oder
+     * campaign. Alte Datensätze ohne Quelle haben null.
+     */
+    public function getSource(): ?string
+    {
+        return $this->source;
+    }
+
+    public function getUtmSource(): ?string
+    {
+        return $this->utmSource;
+    }
+
+    public function getUtmMedium(): ?string
+    {
+        return $this->utmMedium;
+    }
+
+    public function getUtmCampaign(): ?string
+    {
+        return $this->utmCampaign;
     }
 }

@@ -17,6 +17,11 @@ use Symfony\Component\Security\Core\User\UserInterface;
  *
  * Nicht gespeichert werden: rohe IP-Adressen, User-Agent-Zeichenketten,
  * vollständige Referrer-URLs, Query-Parameter oder Fragmente.
+ *
+ * Bots werden über den BotDetector erkannt und standardmäßig nicht
+ * erfasst. DNT- und Sec-GPC-Signale werden respektiert. Server-Tracking
+ * und Collect-Endpunkt laufen über denselben Recorder und werden
+ * identisch behandelt.
  */
 class PageViewRecorder
 {
@@ -29,11 +34,18 @@ class PageViewRecorder
         private readonly PathNormalizer $pathNormalizer,
         private readonly ReferrerNormalizer $referrerNormalizer,
         private readonly IpAnonymizer $ipAnonymizer,
+        private readonly BotDetector $botDetector,
+        private readonly TrafficSourceClassifier $trafficSourceClassifier,
+        private readonly CampaignParameterNormalizer $campaignParameterNormalizer,
         private readonly TokenStorageInterface $tokenStorage,
+        private readonly SystemClock $clock,
         private readonly string $siteKey,
-        private readonly string $salt,
+        private readonly string $hashSecret,
         private readonly array $excludedPaths,
         private readonly bool $recordUserIdentifier,
+        private readonly bool $excludeBots,
+        private readonly bool $respectDnt,
+        private readonly bool $respectGpc,
     ) {
     }
 
@@ -42,8 +54,25 @@ class PageViewRecorder
      * ungültig ist oder ausgeschlossen wurde; in diesem Fall wird
      * nichts gespeichert.
      */
-    public function record(Request $request, ?string $path = null, ?string $referrer = null): bool
+    /**
+     * @param array<string, mixed>|null $campaign Optionale Kampagnen-Parameter (utm_source, utm_medium, utm_campaign); ohne Angabe werden sie aus den Query-Parametern der aktuellen Anfrage abgeleitet
+     */
+    public function record(Request $request, ?string $path = null, ?string $referrer = null, ?array $campaign = null): bool
     {
+        $userAgent = $request->headers->get('User-Agent');
+
+        if ($this->excludeBots && $this->botDetector->isBot($userAgent)) {
+            return false;
+        }
+
+        if ($this->respectDnt && '1' === $request->headers->get('DNT')) {
+            return false;
+        }
+
+        if ($this->respectGpc && '1' === $request->headers->get('Sec-GPC')) {
+            return false;
+        }
+
         $normalizedPath = $this->pathNormalizer->normalize($path ?? $request->getPathInfo());
 
         if (null === $normalizedPath) {
@@ -59,15 +88,29 @@ class PageViewRecorder
 
         // Der User-Agent dient ausschließlich der Klassifikation und
         // wird niemals in die Datenbank geschrieben.
-        $classification = $this->userAgentParser->parse($request->headers->get('User-Agent'));
+        $classification = $this->userAgentParser->parse($userAgent);
 
         $referrerHost = $this->referrerNormalizer->toHost($referrer ?? $request->headers->get('Referer'));
 
-        $now = new \DateTimeImmutable();
+        $campaignParameters = $this->campaignParameterNormalizer->normalize(
+            $campaign ?? [
+                'utm_source' => $request->query->get('utm_source'),
+                'utm_medium' => $request->query->get('utm_medium'),
+                'utm_campaign' => $request->query->get('utm_campaign'),
+            ],
+        );
+
+        $hasCampaign = null !== $campaignParameters['utm_source']
+            || null !== $campaignParameters['utm_medium']
+            || null !== $campaignParameters['utm_campaign'];
+
+        $source = $this->trafficSourceClassifier->classify($referrerHost, $request->getHost(), $hasCampaign);
+
+        $now = $this->clock->now();
         $anonymizedIp = $this->ipAnonymizer->anonymize($request->getClientIp());
         $ipHash = 'unknown' === $anonymizedIp
             ? null
-            : $this->ipAnonymizer->hash($anonymizedIp, $now, $this->salt);
+            : $this->ipAnonymizer->hash($anonymizedIp, $now, $this->hashSecret);
 
         $pageView = PageView::create(
             $this->siteKey,
@@ -80,6 +123,10 @@ class PageViewRecorder
             $classification['device'],
             $ipHash,
             $this->resolveUserIdentifier(),
+            $source,
+            $campaignParameters['utm_source'],
+            $campaignParameters['utm_medium'],
+            $campaignParameters['utm_campaign'],
         );
 
         $this->repository->save($pageView);
@@ -87,14 +134,20 @@ class PageViewRecorder
         return true;
     }
 
+    /**
+     * Prüft Pfadausschlüsse auf Segmentgrenzen: "/admin" schließt
+     * "/admin" und "/admin/..." aus, aber nicht "/administrator".
+     */
     public function isExcluded(string $path): bool
     {
         foreach ($this->excludedPaths as $excludedPath) {
-            if ('' === $excludedPath) {
+            $normalized = rtrim($excludedPath, '/');
+
+            if ('' === $normalized) {
                 continue;
             }
 
-            if (str_starts_with($path, $excludedPath)) {
+            if ($path === $normalized || str_starts_with($path, $normalized.'/')) {
                 return true;
             }
         }
