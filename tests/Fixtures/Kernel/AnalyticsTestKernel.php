@@ -55,7 +55,6 @@ final class AnalyticsTestKernel extends Kernel
             ],
             'orm' => [
                 'auto_mapping' => true,
-                'enable_native_lazy_objects' => \PHP_VERSION_ID >= 80400,
             ],
         ]);
 

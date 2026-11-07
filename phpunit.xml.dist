@@ -6,7 +6,7 @@
          failOnWarning="true"
          cacheDirectory=".phpunit.cache">
     <php>
-        <env name="SYMFONY_DEPRECATIONS_HELPER" value="max[direct]=5"/>
+        <env name="SYMFONY_DEPRECATIONS_HELPER" value="max[direct]=5&amp;max[indirect]=20"/>
     </php>
     <testsuites>
         <testsuite name="unit">
