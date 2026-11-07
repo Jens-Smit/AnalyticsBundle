@@ -54,8 +54,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set('jenssmit_analytics.lock.factory', LockFactory::class)
         ->arg('$store', new Reference('jenssmit_analytics.lock.store'));
 
-    $services->set('jenssmit_analytics.lock.store', FlockStore::class)
-        ->arg('$lockDirectory', \sys_get_temp_dir());
+    $services->set('jenssmit_analytics.lock.store', FlockStore::class);
 
     $services->set(CollectController::class)
         ->arg('$allowedOrigins', '%jenssmit_analytics.allowed_origins%')
