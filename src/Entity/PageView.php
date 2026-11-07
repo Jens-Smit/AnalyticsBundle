@@ -13,7 +13,7 @@ use Doctrine\ORM\Mapping as ORM;
 #[ORM\Table(name: 'jenssmit_page_view')]
 #[ORM\Index(name: 'idx_jenssmit_page_view_created_at', columns: ['created_at'])]
 #[ORM\Index(name: 'idx_jenssmit_page_view_site_created', columns: ['site_key', 'created_at'])]
-final class PageView
+class PageView
 {
     public function __construct(
         #[ORM\Id]
