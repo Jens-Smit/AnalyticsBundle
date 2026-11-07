@@ -99,9 +99,9 @@ final class PageViewRecorderTest extends TestCase
         self::assertMatchesRegularExpression('/^[a-f0-9]{64}$/', (string) $captured->getIpHash());
         // Standardmäßig wird kein Nutzer-Identifier gespeichert.
         self::assertNull($captured->getUserIdentifier());
-        // Referrer-Host google.com wird als Suche klassifiziert.
-        self::assertSame('search', $captured->getSource());
-        // Kampagnen-Parameter der aktuellen URL werden normalisiert übernommen.
+        // Der utm_source-Parameter der aktuellen URL macht den Aufruf
+        // zur Kampagne; Kampagnen haben Vorrang vor der Referrer-Klasse.
+        self::assertSame('campaign', $captured->getSource());
         self::assertSame('mail', $captured->getUtmSource());
     }
 

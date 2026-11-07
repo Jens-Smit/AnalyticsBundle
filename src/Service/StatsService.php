@@ -44,7 +44,7 @@ final class StatsService
      */
     public function summary(int $days = 30): array
     {
-        return $this->cached('summary', $days, null, function (): array {
+        return $this->cached('summary', $days, null, function () use ($days): array {
             $from = $this->startOfPeriod($days);
             $views = $this->repository->countViewsForSite($this->siteKey, $from);
             $visits = $this->repository->countVisitsForSite($this->siteKey, $from);

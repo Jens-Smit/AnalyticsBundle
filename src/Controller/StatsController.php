@@ -5,7 +5,6 @@ namespace Jenssmit\AnalyticsBundle\Controller;
 use Jenssmit\AnalyticsBundle\Service\StatsService;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Symfony\Component\HttpKernel\Attribute\AsController;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;

@@ -106,7 +106,6 @@ final class SchemaProvider
         throw new \RuntimeException(\sprintf('Die Datenbank-Plattform "%s" wird nicht unterstützt.', $platform::class));
     }
 
-
     /**
      * Schema-Anweisungen für die Event-Tabelle, ebenfalls idempotent
      * und plattformabhängig.
@@ -168,7 +167,6 @@ final class SchemaProvider
                 'CREATE INDEX IF NOT EXISTS idx_jenssmit_event_site_occurred ON jenssmit_analytics_event (site_key, occurred_at)',
             ];
         }
-
 
         throw new \RuntimeException(\sprintf('Die Datenbank-Plattform "%s" wird nicht unterstützt.', $platform::class));
     }
