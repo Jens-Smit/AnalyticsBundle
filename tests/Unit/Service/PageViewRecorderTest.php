@@ -9,8 +9,8 @@ use Jenssmit\AnalyticsBundle\Service\BotDetector;
 use Jenssmit\AnalyticsBundle\Service\CampaignParameterNormalizer;
 use Jenssmit\AnalyticsBundle\Service\IpAnonymizer;
 use Jenssmit\AnalyticsBundle\Service\PageViewRecorder;
-use Jenssmit\AnalyticsBundle\Service\PrivacyPolicy;
 use Jenssmit\AnalyticsBundle\Service\PathNormalizer;
+use Jenssmit\AnalyticsBundle\Service\PrivacyPolicy;
 use Jenssmit\AnalyticsBundle\Service\ReferrerNormalizer;
 use Jenssmit\AnalyticsBundle\Service\SystemClock;
 use Jenssmit\AnalyticsBundle\Service\TrafficSourceClassifier;
@@ -299,7 +299,7 @@ final class PageViewRecorderTest extends TestCase
             ->expects(self::once())
             ->method('dispatch')
             ->with(self::isInstanceOf(RecordPageViewMessage::class))
-            ->willReturnCallback(static fn (object $message): array => [$message]);
+            ->willReturnCallback(static fn (object $message): \Symfony\Component\Messenger\Envelope => new \Symfony\Component\Messenger\Envelope($message));
 
         $recorder = $this->createRecorder(false, null, [
             'message_bus' => $messageBus,
