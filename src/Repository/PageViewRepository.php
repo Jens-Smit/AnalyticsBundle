@@ -107,7 +107,7 @@ class PageViewRepository
                 'null_label' => $nullLabel,
                 'limit' => \max(1, $limit),
             ],
-            ['since' => Types::DATETIME_IMMUTABLE],
+            ['since' => Types::DATETIME_IMMUTABLE, 'limit' => Types::INTEGER],
         )->fetchAllAssociative();
 
         $items = [];
