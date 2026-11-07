@@ -27,6 +27,10 @@ final class AnalyticsTestKernel extends Kernel
         ];
     }
 
+    public function registerContainerConfiguration(LoaderInterface $loader): void
+    {
+    }
+
     public function getCacheDir(): string
     {
         return sys_get_temp_dir().'/jenssmit_analytics_test_'.getmypid().'/cache';
@@ -37,7 +41,7 @@ final class AnalyticsTestKernel extends Kernel
         return sys_get_temp_dir().'/jenssmit_analytics_test_'.getmypid().'/logs';
     }
 
-    protected function configureContainer(ContainerBuilder $container, LoaderInterface $loader): void
+    protected function build(ContainerBuilder $container): void
     {
         $container->loadFromExtension('framework', [
             'secret' => 'test',
@@ -64,9 +68,5 @@ final class AnalyticsTestKernel extends Kernel
             'site_key' => 'test_site',
             'salt' => 'test_salt',
         ]);
-    }
-
-    protected function configureRoutes(LoaderInterface $loader): void
-    {
     }
 }

@@ -25,7 +25,7 @@ jobs:
             - name: Installation aus einem fremden Projekt prüfen
               run: |
                   mkdir -p /tmp/consumer
-                  cat > /tmp/consumer/composer.json <<'JSON'
+                  cat > /tmp/consumer/composer.json <<JSON
                   {
                       "name": "acme/consumer",
                       "description": "Prüft die Installation des Analytics-Bundles als Abhängigkeit",
@@ -33,7 +33,7 @@ jobs:
                       "repositories": [
                           {
                               "type": "path",
-                              "url": "${GITHUB_WORKSPACE}",
+                              "url": "$PWD",
                               "options": { "symlink": false }
                           }
                       ],
